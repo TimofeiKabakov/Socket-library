@@ -1,0 +1,31 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\begin{document}
+
+\begin{center}
+CMPT 434 Proposal \\
+Matthew Munro, mam552, 11291769 \\
+Xianglong Du, xid379, 11255352 \\
+Timofei Kabakov, tik981, 11305645 \\
+\end{center}
+\pagebreak
+
+Our project will involve creating a cross-platform static C library intended to 
+abstract away platform-specific implementation details. This means the application programmer would never have to directly 
+include or call platform-specific header files such as sys/socket.h or winsock.h. Instead, they would write their program by 
+linking to the static library and using an API defined by us. \\
+
+The project will include an example program showcasing how to use the library. It will involve multiple windows clients 
+communicating with a linux server implementing the Administrator model, where the server will have a dedicated thread for handling requests 
+and farm blocking operations off to worker threads. \\
+
+Potential challenges include learning Windows' Winsock API. This will give us an opportunity to learn more about 
+how different operating systems handle network programming. \\
+
+The project will also include a test runner to test a number of unit tests to ensure correctness as well as consistency across the two platforms. \\
+
+We will have succeeded in the objectives of the implementation project if we are able to write the example program fully utilizing our 
+cross-platform library without any need for directly using platform-specific APIs. 
+\end{document}
