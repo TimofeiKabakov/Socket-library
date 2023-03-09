@@ -24,7 +24,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
   // TODO
 }
 
-tcp_connection *destroy_tcp_connection() {
+int destroy_tcp_connection() {
   // TODO
 }
 
@@ -45,7 +45,7 @@ udp_connection *create_udp_connection(conn_opt opt) {
   // TODO
 }
 
-udp_connection *destroy_udp_connection() {
+int destroy_udp_connection() {
   // TODO
 }
 
