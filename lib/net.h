@@ -20,7 +20,7 @@ typedef struct conn_opt {
   uint16_t port_num;
 } conn_opt;
 typedef struct remote_ips {
-  remote_ip **ips;
+  remote_ip *ips;
   size_t len;
 } remote_ips;
 

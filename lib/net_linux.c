@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <netdb.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct tcp_connection {
   int listenSockFD;   // Optional, only required if tcp_listen is called.
@@ -26,8 +27,8 @@ typedef struct udp_connection {
 typedef struct remote_ip {
   int protocolVer;
   union {
-    struct sockaddr_in *ipv4;
-    struct sockaddr_in6 *ipv6;
+    struct sockaddr_in ipv4;
+    struct sockaddr_in6 ipv6;
   } ipData;
 } remote_ip;
 
@@ -46,16 +47,12 @@ int Initialize() {
 }
 
 void free_sock_addresses(remote_ips ips) {
-  for (int i = 0; i < ips.len; i++) {
-    remote_ip *ip = ips.ips[i];
-    free(ip);
-  }
   free(ips.ips);
 }
 
 remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len) {
   remote_ips ipList = {0};
-  ipList.ips = malloc(sizeof(remote_ip*) * len);
+  ipList.ips = malloc(sizeof(remote_ip) * len);
 
   int rc = -1;
    for (int i = 0; i < len; i++) {
@@ -84,17 +81,20 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **p
         for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
           if (candidate->ai_protocol != IPPROTO_TCP) { continue; }
           if (candidate->ai_socktype != SOCK_STREAM) { continue; }
+          // We need to copy the sockaddr_in into our new array buffer,
+          // since we are going to free the linked list we got from the OS 
+          // at the end of this function call.
           if (candidate->ai_family == AF_INET) {
-            remote_ip *ip = malloc(sizeof(remote_ip));
-            ip->protocolVer = AF_INET;
-            ip->ipData.ipv4 = (struct sockaddr_in*)candidate->ai_addr;
+            remote_ip ip = {0};
+            ip.protocolVer = AF_INET;
+            memcpy(&ip.ipData.ipv4, (struct sockaddr_in*)candidate->ai_addr, sizeof(struct sockaddr_in));
             ipList.ips[ipList.len] = ip;
             ipList.len += 1;
             break;
           } else {
-            remote_ip *ip = malloc(sizeof(remote_ip));
-            ip->protocolVer = AF_INET6;
-            ip->ipData.ipv6 = (struct sockaddr_in6*)candidate->ai_addr;
+            remote_ip ip = {0};
+            ip.protocolVer = AF_INET6;
+            memcpy(&ip.ipData.ipv6, (struct sockaddr_in6*)candidate->ai_addr, sizeof(struct sockaddr_in6));
             ipList.ips[ipList.len] = ip;
             ipList.len += 1;
             break;
