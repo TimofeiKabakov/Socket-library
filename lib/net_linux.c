@@ -82,6 +82,8 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **p
         // Got a linked list of candidate addresses
         struct addrinfo *candidate = NULL;
         for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
+          if (candidate->ai_protocol != IPPROTO_TCP) { continue; }
+          if (candidate->ai_socktype != SOCK_STREAM) { continue; }
           if (candidate->ai_family == AF_INET) {
             remote_ip *ip = malloc(sizeof(remote_ip));
             ip->protocolVer = AF_INET;
