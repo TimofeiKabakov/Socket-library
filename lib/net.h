@@ -68,6 +68,40 @@ tcp_connection *create_tcp_connection(conn_opt opt);
  */
 int destroy_tcp_connection();
 /**
+ * @brief Listens for incoming connections.
+ *
+ * A process can use this blocking function to wait for and establish
+ * incoming connections.
+ *
+ * @param conn The connection object to listen with.
+ * @return The IP struct of the newly connected remote host.
+ */
+remote_ip *tcp_listen(tcp_connection *conn);
+/**
+ * @brief Establish a connection to a remote host.
+ *
+ * Caller may attempt to establish a connection with multiple remote hosts at
+ * once. The remote host must be listening with a call to tcp_listen.
+ *
+ * @param conn The connection object to establish this connection with.
+ * @param remotes A list of one or more remote connections to attempt to
+ * establish
+ * @return 0 if every connection was successfully opened, nonzero if at least
+ * one connection failed to be established.
+ */
+int tcp_connect_remote(tcp_connection *conn, remote_ips remotes);
+/**
+ * @brief Returns a list of the currently connected remote hosts.
+ *
+ * Upon return of this function, caller receives a list of remote hosts that it
+ * is currently connected to as a result of either tcp_listen or
+ * tcp_connect_remote.
+ *
+ * @param conn The connection object to query remote hosts on.
+ * @return A list of remote hosts.
+ */
+remote_ips *tcp_active_connections(tcp_connection *conn);
+/**
  * @brief Sends a tcp data transmission to hosts represented by remotes
  *
  * @param conn The connection to use for this transmission.

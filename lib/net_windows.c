@@ -28,6 +28,18 @@ int destroy_tcp_connection() {
   // TODO
 }
 
+remote_ip *tcp_listen(tcp_connection *conn) {
+  // TODO
+}
+
+int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
+  // TODO
+}
+
+remote_ips *tcp_active_connections(tcp_connection *conn) {
+  // TODO
+}
+
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
   // TODO
