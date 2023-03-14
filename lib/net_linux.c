@@ -100,7 +100,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **p
             break;
           }
         }
-        free(res);
+        freeaddrinfo(res);
       }
    }
    return ipList;
