@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netdb.h>
+#include <stdlib.h>
 
 typedef struct tcp_connection {
   int listenSockFD;   // Optional, only required if tcp_listen is called.
@@ -77,19 +78,21 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **p
       }
       
       // Get address info for each requested ip/port combination.
-      if ((rc = getaddrinfo(ips[i], ports[i], &hints, &res)) != 0) {
+      if ((rc = getaddrinfo(ips[i], ports[i], &hints, &res)) == 0) {
         // Got a linked list of candidate addresses
         struct addrinfo *candidate = NULL;
         for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
           if (candidate->ai_family == AF_INET) {
             remote_ip *ip = malloc(sizeof(remote_ip));
-            ip->ipData.ipv4 = (struct sockaddr_in*)candidate;
+            ip->protocolVer = AF_INET;
+            ip->ipData.ipv4 = (struct sockaddr_in*)candidate->ai_addr;
             ipList.ips[ipList.len] = ip;
             ipList.len += 1;
             break;
           } else {
             remote_ip *ip = malloc(sizeof(remote_ip));
-            ip->ipData.ipv6 = (struct sockaddr_in6*)candidate;
+            ip->protocolVer = AF_INET6;
+            ip->ipData.ipv6 = (struct sockaddr_in6*)candidate->ai_addr;
             ipList.ips[ipList.len] = ip;
             ipList.len += 1;
             break;
