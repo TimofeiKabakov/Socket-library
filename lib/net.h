@@ -20,9 +20,11 @@ typedef struct conn_opt {
   uint16_t port_num;
 } conn_opt;
 typedef struct remote_ips {
-  remote_ip *ips;
+  remote_ip **ips;
   size_t len;
 } remote_ips;
+
+#define MAX_CONNECTION_OBJECTS 10
 
 // TODO: Define error codes.
 
@@ -37,7 +39,19 @@ typedef struct remote_ips {
  * @return 0 on success, or a nonzero error code if an error occured.
  */
 int Initialize();
-
+/**
+ * @brief Frees a set of ip structs allocated by the library.
+ * 
+ * Caller should always call this method when they are done with a
+ * remote_ips struct they were given by the library, in order to 
+ * free its associated memory. The remote_ips struct is no longer 
+ * valid upon the return of this call. A remote_ips struct from both 
+ * process_tcp_sock_addresses and process_udp_sock_addresses can be 
+ * freed via this method. 
+ * 
+ * @param ips The struct to free. 
+ */
+void free_sock_addresses(remote_ips ips);
 /**
  * @brief Process a list of plaintext IPs for use by the library.
  *
@@ -45,12 +59,22 @@ int Initialize();
  * compatible with underlying syscalls. This function can be used to translate
  * one or more IPs stored as plaintext into these OS-specific structs ahead of
  * time, avoiding multiple costly string comparisons.
+ * 
+ * The length of the two string arrays ips and ports must be equal to len. There 
+ * must be one port for each ip, and vice versa. 
+ * 
+ * If any of the ip/port pairs cannot be resolved due to an underlying platform error, 
+ * only the ip/port pairs that were successfully resolved will be returned.
  *
+ * @param conn The connection object used for this query. 
  * @param ips An array of strings, each string representing a null-terminated IP
  * address in the traditional "dotted-decimal" format.
+ * @param ports An array of strings, each string representing a null-terminated port
+ * corresponding to a given IP address in ips.
+ * @param len The number of elements in the ips array and the ports array. 
  * @return A struct representing an array of remote_ip structs.
  */
-remote_ips create_ip_struct(char **ips);
+remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len);
 
 /**
  * @brief Creates a new tcp connection
@@ -66,7 +90,7 @@ tcp_connection *create_tcp_connection(conn_opt opt);
  *
  * @return 0 on success, or a nonzero value if an error occured.
  */
-int destroy_tcp_connection();
+int destroy_tcp_connection(tcp_connection *conn);
 /**
  * @brief Listens for incoming connections.
  *
@@ -156,6 +180,29 @@ udp_connection *create_udp_connection(conn_opt opt);
  * @return 0 on success, or a nonzero value if an error occured.
  */
 int destroy_udp_connection();
+/**
+ * @brief Process a list of plaintext IPs for use by the library.
+ *
+ * IP addresses must undergo OS-specific processing in order to produce structs
+ * compatible with underlying syscalls. This function can be used to translate
+ * one or more IPs stored as plaintext into these OS-specific structs ahead of
+ * time, avoiding multiple costly string comparisons.
+ * 
+ * The length of the two string arrays ips and ports must be equal to len. There 
+ * must be one port for each ip, and vice versa. 
+ * 
+ * If any of the ip/port pairs cannot be resolved due to an underlying platform error, 
+ * only the ip/port pairs that were successfully resolved will be returned.
+ *
+ * @param conn The connection object used for this query. 
+ * @param ips An array of strings, each string representing a null-terminated IP
+ * address in the traditional "dotted-decimal" format.
+ * @param ports An array of strings, each string representing a null-terminated port
+ * corresponding to a given IP address in ips.
+ * @param len The number of elements in the ips array and the ports array. 
+ * @return A struct representing an array of remote_ip structs.
+ */
+remote_ips process_udp_sock_addresses(udp_connection *conn, char **ips, char **ports, int len);
 /**
  * @brief Sends a udp data transmission to hosts represented by remotes
  *

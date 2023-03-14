@@ -16,7 +16,11 @@ int Initialize() {
   // TODO
 }
 
-remote_ips create_ip_struct(char **ips) {
+void free_sock_addresses(remote_ips ips) {
+  // TODO
+}
+
+remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len) {
   // TODO
 }
 
@@ -24,7 +28,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
   // TODO
 }
 
-int destroy_tcp_connection() {
+int destroy_tcp_connection(tcp_connection *conn) {
   // TODO
 }
 
@@ -58,6 +62,10 @@ udp_connection *create_udp_connection(conn_opt opt) {
 }
 
 int destroy_udp_connection() {
+  // TODO
+}
+
+remote_ips process_udp_sock_addresses(udp_connection *conn, char **ips, char **ports, int len) {
   // TODO
 }
 
