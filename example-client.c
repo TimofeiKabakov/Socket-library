@@ -4,13 +4,14 @@
 #include "lib/net.h"
 
 char *serverIP[1] = {""};
+char *serverPort[1] = {""};
 
 int main() {
   conn_opt options = {0};
   tcp_connection *conn = create_tcp_connection(options);
 
   while (1) {
-    remote_ips server = create_ip_struct(serverIP);
+    remote_ips server = process_tcp_sock_addresses(conn, serverIP, serverPort, 1);
     tcp_connect_remote(conn, server);
     
     void *data;  // Some request
