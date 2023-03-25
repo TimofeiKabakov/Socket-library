@@ -5,6 +5,9 @@
 #include <netdb.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <errno.h>
 
 typedef struct tcp_connection {
   int listenSockFD;   // Optional, only required if tcp_listen is called.
@@ -33,11 +36,59 @@ typedef struct remote_ip {
 } remote_ip;
 
 // Private functions, for internal use only, not exposed to the external API
-int generate_listen_socket() {
-  // TODO
+int generate_socket(remote_ip ip, int listen, int doBind) {
+  int protocol = ip.protocolVer == IPV4 ? AF_INET : AF_INET6;
+  struct addrinfo hints = {0};
+  struct addrinfo *res = NULL;
+  hints.ai_family = protocol;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = listen != 0 ? AI_PASSIVE : 0;
+
+  if (listen != 0) {
+    int rc = -1;
+    char portStr[6];
+    sprintf(portStr, "%d", listen);
+    if ((rc = getaddrinfo(NULL, portStr, &hints, &res)) != 0) {
+      return -1;
+    }
+  } else {
+    int rc = -1;
+    if ((rc = getaddrinfo(NULL, "0", &hints, &res)) != 0) {
+      return -1;
+    }
+  }
+
+  // Got a linked list of candidate addresses
+  struct addrinfo *candidate = NULL;
+  for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
+      if (candidate->ai_protocol != IPPROTO_TCP) { continue; }
+      if (candidate->ai_socktype != SOCK_STREAM) { continue; }
+      if (protocol == IPV4) { if (candidate->ai_family != AF_INET) { continue; }}
+      if (protocol == IPV6) { if (candidate->ai_family != AF_INET6) { continue; }}
+
+      int candidateSocket = 0;
+      if ((candidateSocket = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol)) != -1) {
+        int rc = 0;
+        if (doBind) {
+          if ((rc = bind(candidateSocket, candidate->ai_addr, candidate->ai_addrlen)) != -1) {
+            return candidateSocket;
+          }
+        } else {
+          return candidateSocket;
+        }
+        close(candidateSocket);
+      }
+  }
+  return -1;
 }
 
-int Initialize() {
+int generate_listen_socket(int ver, int portNum) {
+  remote_ip ip;
+  ip.protocolVer = ver;
+  generate_socket(ip, portNum, 1);
+}
+
+void Initialize() {
   // Initialize all slots to unused.
   for (int i = 0; i < MAX_CONNECTION_OBJECTS; i++) {
     activeConnections[i].uid = -1;
@@ -70,7 +121,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **p
           break;
         case DONT_CARE:
         default:
-          hints.ai_family = AF_UNSPEC;
+          hints.ai_family = AF_INET;
           break;
       }
       
@@ -86,14 +137,14 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **p
           // at the end of this function call.
           if (candidate->ai_family == AF_INET) {
             remote_ip ip = {0};
-            ip.protocolVer = AF_INET;
+            ip.protocolVer = IPV4;
             memcpy(&ip.ipData.ipv4, (struct sockaddr_in*)candidate->ai_addr, sizeof(struct sockaddr_in));
             ipList.ips[ipList.len] = ip;
             ipList.len += 1;
             break;
           } else {
             remote_ip ip = {0};
-            ip.protocolVer = AF_INET6;
+            ip.protocolVer = IPV6;
             memcpy(&ip.ipData.ipv6, (struct sockaddr_in6*)candidate->ai_addr, sizeof(struct sockaddr_in6));
             ipList.ips[ipList.len] = ip;
             ipList.len += 1;
@@ -112,6 +163,12 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
       // Found a free slot
       activeConnections[i].uid = nextUID++;
       activeConnections[i].options = opt;
+      if (opt.ver == DONT_CARE) {
+        // Default to IPV4
+        activeConnections[i].options.ver = IPV4;
+      }
+      activeConnections[i].listenSockFD = generate_listen_socket(activeConnections[i].options.ver, activeConnections[i].options.port_num);
+      if (activeConnections[i].listenSockFD == -1) { return NULL; }
       return &activeConnections[i];
     }
   }
@@ -126,12 +183,52 @@ int destroy_tcp_connection(tcp_connection *conn) {
   // and free sockets/other resources.
 }
 
-remote_ip *tcp_listen(tcp_connection *conn) {
-  // TODO
+int tcp_listen(tcp_connection *conn) {
+  return listen(conn->listenSockFD, SOMAXCONN);
+}
+
+remote_ip *accept_remote_connection(tcp_connection *conn) {
+  remote_ip *ip = malloc(sizeof(remote_ip));
+  ip->protocolVer = conn->options.ver;
+  int newFD = -1;
+  if (ip->protocolVer == AF_INET) {
+    socklen_t addrlen = sizeof(ip->ipData.ipv4);
+    newFD = accept(conn->listenSockFD, (struct sockaddr*)&ip->ipData.ipv4, &addrlen);
+  } else {
+    socklen_t addrlen = sizeof(ip->ipData.ipv6);
+    newFD = accept(conn->listenSockFD, (struct sockaddr*)&ip->ipData.ipv6, &addrlen);
+  }
+  if (newFD == -1) {
+    return NULL;
+  }
+
+  return ip;
 }
 
 int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
-  // TODO
+  int succeedAll = 1;
+  for (int i = 0; i < remotes.len; i++) {
+    int rc = -1;
+    int sockfd = generate_socket(remotes.ips[i], 0, 0);
+    if (remotes.ips[i].protocolVer == IPV4) {
+      struct sockaddr *convert = (struct sockaddr *)(&(remotes.ips[i].ipData.ipv4));
+      socklen_t addrlen = sizeof(*convert);
+      if ((rc = connect(sockfd, convert, addrlen)) == -1) {
+        succeedAll = 0;
+        close(sockfd);
+        continue;
+      }
+    } else {
+      struct sockaddr *convert = (struct sockaddr *)(&remotes.ips[i].ipData.ipv6);
+      socklen_t addrlen = sizeof(*convert);
+      if ((rc = connect(sockfd, convert, addrlen)) == -1) {
+        succeedAll = 0;
+        close(sockfd);
+        continue;
+      }
+    }
+  }
+  return succeedAll;
 }
 
 remote_ips *tcp_active_connections(tcp_connection *conn) {

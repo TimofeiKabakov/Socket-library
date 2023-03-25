@@ -38,7 +38,7 @@ typedef struct remote_ips {
  *
  * @return 0 on success, or a nonzero error code if an error occured.
  */
-int Initialize();
+void Initialize();
 /**
  * @brief Frees a set of ip structs allocated by the library.
  * 
@@ -94,13 +94,23 @@ int destroy_tcp_connection(tcp_connection *conn);
 /**
  * @brief Listens for incoming connections.
  *
- * A process can use this blocking function to wait for and establish
- * incoming connections.
+ * A process can use this function to mark itself as listening for a remote connection.
+ * The connection will listen on the port number provided by the conn_opt struct.
+ * 
+ * Caller is responsible for freeing the returned remote_ip struct. 
  *
  * @param conn The connection object to listen with.
- * @return The IP struct of the newly connected remote host.
+ * @return 1 is the connection is successfully listening, 0 otherwise.
  */
-remote_ip *tcp_listen(tcp_connection *conn);
+int tcp_listen(tcp_connection *conn);
+
+/**
+ * @brief Wait for incoming remote connections on a listen port and accept them.
+ * 
+ * @param conn The connection to wait with
+ * @return remote_ip* The address of the remote host that just connected
+ */
+remote_ip *accept_remote_connection(tcp_connection *conn);
 /**
  * @brief Establish a connection to a remote host.
  *
