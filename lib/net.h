@@ -126,7 +126,7 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes);
  * @brief Returns a list of the currently connected remote hosts.
  *
  * Upon return of this function, caller receives a list of remote hosts that it
- * is currently connected to as a result of either tcp_listen or
+ * is currently connected to as a result of either accept_remote_connection or
  * tcp_connect_remote.
  *
  * @param conn The connection object to query remote hosts on.

@@ -15,6 +15,9 @@ typedef struct tcp_connection {
   int *incomingFDs; // One filedescriptor for each incoming connection through accept
   size_t numIncomingFDs;
   size_t maxIncomingFDs;
+  int *outgoingFDs; // One filedescriptor for each outgoing connection through connect
+  size_t numOutgoingFDs;
+  size_t maxOutgoingFDs;
   conn_opt options;
   int uid;          // Unique ID for this identifier object.
                     // A value of -1 denotes this slot in activeConnections 
@@ -96,6 +99,7 @@ void Initialize() {
     activeConnections[i].uid = -1;
     activeConnections[i].listenSockFD = -1;
     activeConnections[i].numIncomingFDs = 0;
+    activeConnections[i].numOutgoingFDs = 0;
   }
 }
 
@@ -170,8 +174,9 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
         activeConnections[i].options.ver = IPV4;
       }
       activeConnections[i].incomingFDs = malloc(sizeof(int) * 10);
-      activeConnections[i].numIncomingFDs = 10;
       activeConnections[i].maxIncomingFDs = 10;
+      activeConnections[i].outgoingFDs = malloc(sizeof(int) * 10);
+      activeConnections[i].maxOutgoingFDs = 10;
       activeConnections[i].listenSockFD = generate_listen_socket(activeConnections[i].options.ver, activeConnections[i].options.port_num);
       if (activeConnections[i].listenSockFD == -1) { return NULL; }
       return &activeConnections[i];
@@ -206,7 +211,13 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
   if (newFD == -1) {
     return NULL;
   }
-
+  // Add to current connections 
+  conn->numOutgoingFDs += 1;
+  if (conn->numOutgoingFDs > conn->maxOutgoingFDs) {
+    conn->maxOutgoingFDs *= 2;
+    conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
+  }
+  conn->outgoingFDs[conn->numOutgoingFDs-1] = newFD;
   return ip;
 }
 
@@ -238,6 +249,13 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
         close(sockfd);
         continue;
       }
+      // Add to current connections 
+      conn->numIncomingFDs += 1;
+      if (conn->numIncomingFDs > conn->maxIncomingFDs) {
+        conn->maxIncomingFDs *= 2;
+        conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
+      }
+      conn->incomingFDs[conn->numIncomingFDs-1] = sockfd;
     }
   }
   return succeedAll;
@@ -245,26 +263,32 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
 
 remote_ips *tcp_active_connections(tcp_connection *conn) {
   // TODO
+  return NULL;
 }
 
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
   // TODO
+  return 0;
 }
 
 int receive_tcp_message_async(tcp_connection *conn, void **data, size_t *len) {
   // TODO
+  return 0;
 }
 
 int receive_tcp_message(tcp_connection *conn, void **data, size_t *len) {
   // TODO
+  return 0;
 }
 
 udp_connection *create_udp_connection(conn_opt opt) {
   // TODO
+  return NULL;
 }
 
 int destroy_udp_connection() {
+  return 0;
   // TODO
 }
 
@@ -275,13 +299,16 @@ remote_ips process_udp_sock_addresses(udp_connection *conn, char **ips, char **p
 int send_udp_message(udp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
   // TODO
+  return 0;
 }
 
 remote_ip *receive_udp_message_async(udp_connection *conn, void **data,
                                      size_t *len) {
   // TODO
+  return NULL;
 }
 
 remote_ip *receive_udp_message(udp_connection *conn, void **data, size_t *len) {
   // TODO
+  return NULL;
 }
