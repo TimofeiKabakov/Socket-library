@@ -212,12 +212,12 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
     return NULL;
   }
   // Add to current connections 
-  conn->numOutgoingFDs += 1;
-  if (conn->numOutgoingFDs > conn->maxOutgoingFDs) {
-    conn->maxOutgoingFDs *= 2;
-    conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
+  conn->numIncomingFDs += 1;
+  if (conn->numIncomingFDs > conn->maxIncomingFDs) {
+    conn->maxIncomingFDs *= 2;
+    conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
   }
-  conn->outgoingFDs[conn->numOutgoingFDs-1] = newFD;
+  conn->incomingFDs[conn->numIncomingFDs-1] = newFD;
   return ip;
 }
 
@@ -235,12 +235,12 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
         continue;
       }
       // Add to current connections 
-      conn->numIncomingFDs += 1;
-      if (conn->numIncomingFDs > conn->maxIncomingFDs) {
-        conn->maxIncomingFDs *= 2;
-        conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
+      conn->numOutgoingFDs += 1;
+      if (conn->numOutgoingFDs > conn->maxOutgoingFDs) {
+        conn->maxOutgoingFDs *= 2;
+        conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
       }
-      conn->incomingFDs[conn->numIncomingFDs-1] = sockfd;
+      conn->outgoingFDs[conn->numOutgoingFDs-1] = sockfd;
     } else {
       struct sockaddr *convert = (struct sockaddr *)(&remotes.ips[i].ipData.ipv6);
       socklen_t addrlen = sizeof(*convert);
@@ -250,20 +250,56 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
         continue;
       }
       // Add to current connections 
-      conn->numIncomingFDs += 1;
-      if (conn->numIncomingFDs > conn->maxIncomingFDs) {
-        conn->maxIncomingFDs *= 2;
-        conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
+      conn->numOutgoingFDs += 1;
+      if (conn->numOutgoingFDs > conn->maxOutgoingFDs) {
+        conn->maxOutgoingFDs *= 2;
+        conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
       }
-      conn->incomingFDs[conn->numIncomingFDs-1] = sockfd;
+      conn->outgoingFDs[conn->numOutgoingFDs-1] = sockfd;
     }
   }
   return succeedAll;
 }
 
-remote_ips *tcp_active_connections(tcp_connection *conn) {
-  // TODO
-  return NULL;
+
+remote_ips tcp_active_accepts(tcp_connection *conn) {
+  remote_ips ips;
+  ips.len = conn->numIncomingFDs;
+  ips.ips = malloc(sizeof(remote_ip) * ips.len);
+  for (int i = 0; i < ips.len; i++) {
+    remote_ip ip;
+    ip.protocolVer = conn->options.ver;
+    struct sockaddr addr = {0};
+    socklen_t addrlen = sizeof(addr);
+    getpeername(conn->incomingFDs[i], &addr, &addrlen);
+    if (ip.protocolVer == IPV4) {
+      ip.ipData.ipv4 = *(struct sockaddr_in*)&addr;
+    } else {
+      ip.ipData.ipv6 = *(struct sockaddr_in6*)&addr;
+    }
+    ips.ips[i] = ip;
+  }
+  return ips;
+}
+
+remote_ips tcp_active_connects(tcp_connection *conn) {
+  remote_ips ips;
+  ips.len = conn->numOutgoingFDs;
+  ips.ips = malloc(sizeof(remote_ip) * ips.len);
+  for (int i = 0; i < ips.len; i++) {
+    remote_ip ip;
+    ip.protocolVer = conn->options.ver;
+    struct sockaddr addr = {0};
+    socklen_t addrlen = sizeof(addr);
+    getpeername(conn->outgoingFDs[i], &addr, &addrlen);
+    if (ip.protocolVer == IPV4) {
+      ip.ipData.ipv4 = *(struct sockaddr_in*)&addr;
+    } else {
+      ip.ipData.ipv6 = *(struct sockaddr_in6*)&addr;
+    }
+    ips.ips[i] = ip;
+  }
+  return ips;
 }
 
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,

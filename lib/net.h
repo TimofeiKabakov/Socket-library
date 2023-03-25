@@ -123,16 +123,19 @@ remote_ip *accept_remote_connection(tcp_connection *conn);
  */
 int tcp_connect_remote(tcp_connection *conn, remote_ips remotes);
 /**
- * @brief Returns a list of the currently connected remote hosts.
- *
- * Upon return of this function, caller receives a list of remote hosts that it
- * is currently connected to as a result of either accept_remote_connection or
- * tcp_connect_remote.
+ * @brief Returns a list of the currently connected hosts through tcp_active_accepts
  *
  * @param conn The connection object to query remote hosts on.
  * @return A list of remote hosts.
  */
-remote_ips *tcp_active_connections(tcp_connection *conn);
+remote_ips tcp_active_accepts(tcp_connection *conn);
+/**
+ * @brief Returns a list of the currently connected hosts through accept_remote_connection
+ *
+ * @param conn The connection object to query remote hosts on.
+ * @return A list of remote hosts.
+ */
+remote_ips tcp_active_connects(tcp_connection *conn);
 /**
  * @brief Sends a tcp data transmission to hosts represented by remotes
  *
