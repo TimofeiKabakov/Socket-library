@@ -75,7 +75,6 @@ void free_sock_addresses(remote_ips ips);
  * @return A struct representing an array of remote_ip structs.
  */
 remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len);
-
 /**
  * @brief Creates a new tcp connection
  *
@@ -103,7 +102,6 @@ int destroy_tcp_connection(tcp_connection *conn);
  * @return 1 is the connection is successfully listening, 0 otherwise.
  */
 int tcp_listen(tcp_connection *conn);
-
 /**
  * @brief Wait for incoming remote connections on a listen port and accept them.
  * 

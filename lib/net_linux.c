@@ -12,7 +12,9 @@
 typedef struct tcp_connection {
   int listenSockFD;   // Optional, only required if tcp_listen is called.
   int *dataFDs;     // One filedescriptor for each successful connection we establish
-  size_t numDataFDs;
+  int *incomingFDs; // One filedescriptor for each incoming connection through accept
+  size_t numIncomingFDs;
+  size_t maxIncomingFDs;
   conn_opt options;
   int uid;          // Unique ID for this identifier object.
                     // A value of -1 denotes this slot in activeConnections 
@@ -93,7 +95,7 @@ void Initialize() {
   for (int i = 0; i < MAX_CONNECTION_OBJECTS; i++) {
     activeConnections[i].uid = -1;
     activeConnections[i].listenSockFD = -1;
-    activeConnections[i].numDataFDs = 0;
+    activeConnections[i].numIncomingFDs = 0;
   }
 }
 
@@ -167,6 +169,9 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
         // Default to IPV4
         activeConnections[i].options.ver = IPV4;
       }
+      activeConnections[i].incomingFDs = malloc(sizeof(int) * 10);
+      activeConnections[i].numIncomingFDs = 10;
+      activeConnections[i].maxIncomingFDs = 10;
       activeConnections[i].listenSockFD = generate_listen_socket(activeConnections[i].options.ver, activeConnections[i].options.port_num);
       if (activeConnections[i].listenSockFD == -1) { return NULL; }
       return &activeConnections[i];
@@ -218,6 +223,13 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
         close(sockfd);
         continue;
       }
+      // Add to current connections 
+      conn->numIncomingFDs += 1;
+      if (conn->numIncomingFDs > conn->maxIncomingFDs) {
+        conn->maxIncomingFDs *= 2;
+        conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
+      }
+      conn->incomingFDs[conn->numIncomingFDs-1] = sockfd;
     } else {
       struct sockaddr *convert = (struct sockaddr *)(&remotes.ips[i].ipData.ipv6);
       socklen_t addrlen = sizeof(*convert);
