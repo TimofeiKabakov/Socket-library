@@ -1,7 +1,16 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <Windows.h>
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+
 #include "net.h"
+
+#pragma comment(lib, "ws2_32.lib")
 
 typedef struct tcp_connection {
   // TODO
+  WSADATA wsa;
 } tcp_connection;
 
 typedef struct udp_connection {
@@ -14,6 +23,7 @@ typedef struct remote_ip {
 
 int Initialize() {
   // TODO
+  WSAStartup(2, 2);
 }
 
 remote_ips create_ip_struct(char **ips) {
