@@ -34,6 +34,7 @@ typedef struct udp_connection {
 
 typedef struct remote_ip {
   int protocolVer;
+  int fd;
   union {
     struct sockaddr_in ipv4;
     struct sockaddr_in6 ipv6;
@@ -241,6 +242,7 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
     conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
   }
   conn->incomingFDs[conn->numIncomingFDs-1] = newFD;
+  ip->fd = newFD;
   return ip;
 }
 
@@ -264,6 +266,7 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
         conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
       }
       conn->outgoingFDs[conn->numOutgoingFDs-1] = sockfd;
+      remotes.ips[i].fd = sockfd;
     } else {
       struct sockaddr *convert = (struct sockaddr *)(&remotes.ips[i].ipData.ipv6);
       socklen_t addrlen = sizeof(*convert);
@@ -279,6 +282,7 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
         conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
       }
       conn->outgoingFDs[conn->numOutgoingFDs-1] = sockfd;
+      remotes.ips[i].fd = sockfd;
     }
   }
   return succeedAll;
@@ -300,6 +304,7 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
     } else {
       ip.ipData.ipv6 = *(struct sockaddr_in6*)&addr;
     }
+    ip.fd = conn->incomingFDs[i];
     ips.ips[i] = ip;
   }
   return ips;
@@ -320,6 +325,7 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
     } else {
       ip.ipData.ipv6 = *(struct sockaddr_in6*)&addr;
     }
+    ip.fd = conn->outgoingFDs[i];
     ips.ips[i] = ip;
   }
   return ips;
@@ -327,61 +333,12 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
 
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
-  
-  int numSends = 0;
-  // Check all incoming connections
-  for (int i = 0; i < conn->numIncomingFDs; i++) {
-    for (int j = 0; j < remotes.len; j++) {
-      struct sockaddr peer = {0}; 
-      socklen_t addrlen = sizeof(peer);
-      getpeername(conn->incomingFDs[i], &peer, &addrlen);
-      if (conn->options.ver == IPV4) {
-        if (compare_addr((struct sockaddr_in*)&peer, &remotes.ips[j].ipData.ipv4)) {
-          // Found the fd to send to
-          int rc = -1;
-          rc = send(conn->incomingFDs[i], data, len, 0);
-          if (rc != -1) {
-            numSends += 1;
-          }
-        }
-      } else {
-        if (compare_addr6((struct sockaddr_in6*)&peer, &remotes.ips[j].ipData.ipv6)) {
-          // Found the fd to send to
-          int rc = -1;
-          rc = send(conn->incomingFDs[i], data, len, 0);
-          if (rc != -1) {
-            numSends += 1;
-          }
-        }
-      }
-    }
-  }
 
-  // Now do it for all outgoing connections...
-  for (int i = 0; i < conn->numOutgoingFDs; i++) {
-    for (int j = 0; j < remotes.len; j++) {
-      struct sockaddr peer = {0}; 
-      socklen_t addrlen = sizeof(peer);
-      getpeername(conn->outgoingFDs[i], &peer, &addrlen);
-      if (conn->options.ver == IPV4) {
-        if (compare_addr((struct sockaddr_in*)&peer, &remotes.ips[j].ipData.ipv4)) {
-          // Found the fd to send to
-          int rc = -1;
-          rc = send(conn->outgoingFDs[i], data, len, 0);
-          if (rc != -1) {
-            numSends += 1;
-          }
-        }
-      } else {
-        if (compare_addr6((struct sockaddr_in6*)&peer, &remotes.ips[j].ipData.ipv6)) {
-          // Found the fd to send to
-          int rc = -1;
-          rc = send(conn->outgoingFDs[i], data, len, 0);
-          if (rc != -1) {
-            numSends += 1;
-          }
-        }
-      }
+  int numSends = 0;
+  for (int i = 0; i < remotes.len; i++) {
+    int rc = send(remotes.ips[i].fd, data, len, 0);
+    if (rc > 0) {
+      numSends++;
     }
   }
   return numSends;
