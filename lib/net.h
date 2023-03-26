@@ -95,18 +95,18 @@ int destroy_tcp_connection(tcp_connection *conn);
  *
  * A process can use this function to mark itself as listening for a remote connection.
  * The connection will listen on the port number provided by the conn_opt struct.
- * 
- * Caller is responsible for freeing the returned remote_ip struct. 
  *
  * @param conn The connection object to listen with.
- * @return 1 is the connection is successfully listening, 0 otherwise.
+ * @return 1 if the connection is successfully listening, 0 if failure occured
  */
 int tcp_listen(tcp_connection *conn);
 /**
  * @brief Wait for incoming remote connections on a listen port and accept them.
  * 
+ * This call will block until a newly accepted connection is available.
+ * 
  * @param conn The connection to wait with
- * @return remote_ip* The address of the remote host that just connected
+ * @return remote_ip* The address of the remote host that just connected, or NULL if an error occured
  */
 remote_ip *accept_remote_connection(tcp_connection *conn);
 /**
@@ -144,7 +144,7 @@ remote_ips tcp_active_connects(tcp_connection *conn);
  * Multiple IP addresses represents a multicast transmission to multiple hosts.
  * @param data A pointer to the data to send.
  * @param len The length of the data to send, in bytes.
- * @return 0 on success, or a nonzero value if an error occured
+ * @return The number of remote hosts that were successfully sent to.
  */
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len);

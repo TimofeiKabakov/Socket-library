@@ -114,7 +114,7 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
 int generate_listen_socket(int ver, int portNum) {
   remote_ip ip;
   ip.protocolVer = ver;
-  generate_socket(ip, portNum, 1);
+  return generate_socket(ip, portNum, 1);
 }
 
 void Initialize() {
@@ -211,10 +211,20 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
 
 int destroy_tcp_connection(tcp_connection *conn) {
   if (conn == NULL) { return -1; }
+
+  for (int i = 0; i < conn->numIncomingFDs; i++) {
+    close(conn->incomingFDs[i]);
+  }
+  for (int i = 0; i < conn->numOutgoingFDs; i++) {
+    close(conn->outgoingFDs[i]);
+  }
+  close(conn->listenSockFD);
+
+  free(conn->incomingFDs);
+  free(conn->outgoingFDs);
+  memset(conn, 0, sizeof(tcp_connection));
   conn->uid = -1; // Mark this slot as free
-  
-  // TODO: Close established TCP connections with remote hosts
-  // and free sockets/other resources.
+  return 0;
 }
 
 int tcp_listen(tcp_connection *conn) {
@@ -368,6 +378,8 @@ int destroy_udp_connection() {
 
 remote_ips process_udp_sock_addresses(udp_connection *conn, char **ips, char **ports, int len) {
   // TODO
+  remote_ips remotes = {0};
+  return remotes;
 }
 
 int send_udp_message(udp_connection *conn, remote_ips remotes, void *data,
