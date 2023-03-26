@@ -40,6 +40,26 @@ typedef struct remote_ip {
   } ipData;
 } remote_ip;
 
+
+int compare_addr(struct sockaddr_in *first, struct sockaddr_in *second) {
+  return (first->sin_addr.s_addr == second->sin_addr.s_addr) && (first->sin_port == second->sin_port);
+}
+
+int compare_addr6(struct sockaddr_in6 *first, struct sockaddr_in6 *second) {
+  int match = 1;
+  for (int i = 0; i < 4; i++) {
+    if (first->sin6_addr.__in6_u.__u6_addr32[i] != second->sin6_addr.__in6_u.__u6_addr32[i]) {
+      match = 0;
+      break;
+    }
+  }
+
+  if (first->sin6_port == second->sin6_port) {
+    match = 0;
+  }
+  return match;
+}
+
 // Private functions, for internal use only, not exposed to the external API
 int generate_socket(remote_ip ip, int listen, int doBind) {
   int protocol = ip.protocolVer == IPV4 ? AF_INET : AF_INET6;
@@ -74,6 +94,9 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
       int candidateSocket = 0;
       if ((candidateSocket = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol)) != -1) {
         int rc = 0;
+        // DEBUG
+        int yes = 1;
+        setsockopt(candidateSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
         if (doBind) {
           if ((rc = bind(candidateSocket, candidate->ai_addr, candidate->ai_addrlen)) != -1) {
             return candidateSocket;
@@ -304,18 +327,67 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
 
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
-  // TODO
-  return 0;
-}
+  
+  int numSends = 0;
+  // Check all incoming connections
+  for (int i = 0; i < conn->numIncomingFDs; i++) {
+    for (int j = 0; j < remotes.len; j++) {
+      struct sockaddr peer = {0}; 
+      socklen_t addrlen = sizeof(peer);
+      getpeername(conn->incomingFDs[i], &peer, &addrlen);
+      if (conn->options.ver == IPV4) {
+        if (compare_addr((struct sockaddr_in*)&peer, &remotes.ips[j].ipData.ipv4)) {
+          // Found the fd to send to
+          int rc = -1;
+          rc = send(conn->incomingFDs[i], data, len, 0);
+          if (rc != -1) {
+            numSends += 1;
+          }
+        }
+      } else {
+        if (compare_addr6((struct sockaddr_in6*)&peer, &remotes.ips[j].ipData.ipv6)) {
+          // Found the fd to send to
+          int rc = -1;
+          rc = send(conn->incomingFDs[i], data, len, 0);
+          if (rc != -1) {
+            numSends += 1;
+          }
+        }
+      }
+    }
+  }
 
-int receive_tcp_message_async(tcp_connection *conn, void **data, size_t *len) {
-  // TODO
-  return 0;
+  // Now do it for all outgoing connections...
+  for (int i = 0; i < conn->numOutgoingFDs; i++) {
+    for (int j = 0; j < remotes.len; j++) {
+      struct sockaddr peer = {0}; 
+      socklen_t addrlen = sizeof(peer);
+      getpeername(conn->outgoingFDs[i], &peer, &addrlen);
+      if (conn->options.ver == IPV4) {
+        if (compare_addr((struct sockaddr_in*)&peer, &remotes.ips[j].ipData.ipv4)) {
+          // Found the fd to send to
+          int rc = -1;
+          rc = send(conn->outgoingFDs[i], data, len, 0);
+          if (rc != -1) {
+            numSends += 1;
+          }
+        }
+      } else {
+        if (compare_addr6((struct sockaddr_in6*)&peer, &remotes.ips[j].ipData.ipv6)) {
+          // Found the fd to send to
+          int rc = -1;
+          rc = send(conn->outgoingFDs[i], data, len, 0);
+          if (rc != -1) {
+            numSends += 1;
+          }
+        }
+      }
+    }
+  }
+  return numSends;
 }
 
 int receive_tcp_message(tcp_connection *conn, void **data, size_t *len) {
-  // TODO
-  return 0;
 }
 
 udp_connection *create_udp_connection(conn_opt opt) {
