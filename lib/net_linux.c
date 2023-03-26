@@ -344,7 +344,16 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
   return numSends;
 }
 
-int receive_tcp_message(tcp_connection *conn, void **data, size_t *len) {
+int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
+  *data = malloc(RECV_BUF_SIZE);
+  if (senderIdx > ips.len - 1) { return -1; }
+  remote_ip *sender = &ips.ips[senderIdx];
+  return recv(sender->fd, *data, RECV_BUF_SIZE, 0);
+}
+
+int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
+  // TODO
+  return 0;
 }
 
 udp_connection *create_udp_connection(conn_opt opt) {

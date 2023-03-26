@@ -152,11 +152,13 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
  * @brief Retrieves a pending TCP message, blocking if none exists.
  *
  * @param conn The connection to use for this transmission.
+ * @param ips a list of ips containing the desired sender to listen for a message from
+ * @param senderIdx The index of ips containing the desired sender
  * @param data A pointer to a pointer that will hold the received message
  * @param len The length of the received message, in bytes
  * @return 0 on success, or a nonzero value if an error occured.
  */
-int receive_tcp_message(tcp_connection *conn, void **data, size_t *len);
+int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len);
 /**
  * @brief Retrieves a pending TCP message, if one exists.
  *
@@ -164,17 +166,14 @@ int receive_tcp_message(tcp_connection *conn, void **data, size_t *len);
  * receive_tcp_message. It will immediately return, with data set to NULL, if no
  * transmission is ready to be received.
  *
- * If this function returns an error, the values of data and len are
- * implementation defined and should not be relied on.
- *
- * @param conn The connection to use for this transmission
- * @param data A pointer to a pointer that will hold the received message, or
- * NULL if there was no message
- * @param len The length of the message, in bytes, if there was a message ready
- * to be received.
+ * @param conn The connection to use for this transmission.
+ * @param ips a list of ips containing the desired sender to listen for a message from
+ * @param senderIdx The index of ips containing the desired sender
+ * @param data A pointer to a pointer that will hold the received message
+ * @param len The length of the received message, in bytes
  * @return 0 on success, or a nonzero value if an error occured.
  */
-int receive_tcp_message_async(tcp_connection *conn, void **data, size_t *len);
+int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len);
 
 /**
  * @brief Create a new udp connection.
