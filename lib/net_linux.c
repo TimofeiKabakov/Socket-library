@@ -1,27 +1,30 @@
-#include "net.h"
-
-#include <sys/socket.h>
-#include <sys/types.h>
+#include <errno.h>
 #include <netdb.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include <errno.h>
+
+#include "net.h"
+
+#define RECV_BUF_SIZE 64
 
 typedef struct tcp_connection {
-  int listenSockFD;   // Optional, only required if tcp_listen is called.
-  int *dataFDs;     // One filedescriptor for each successful connection we establish
-  int *incomingFDs; // One filedescriptor for each incoming connection through accept
+  int listenSockFD;  // Optional, only required if tcp_listen is called.
+  int *incomingFDs;  // One filedescriptor for each incoming connection through
+                     // accept
   size_t numIncomingFDs;
   size_t maxIncomingFDs;
-  int *outgoingFDs; // One filedescriptor for each outgoing connection through connect
+  int *outgoingFDs;  // One filedescriptor for each outgoing connection through
+                     // connect
   size_t numOutgoingFDs;
   size_t maxOutgoingFDs;
   conn_opt options;
-  int uid;          // Unique ID for this identifier object.
-                    // A value of -1 denotes this slot in activeConnections 
-                    // is free.
+  int uid;  // Unique ID for this identifier object.
+            // A value of -1 denotes this slot in activeConnections
+            // is free.
 } tcp_connection;
 
 tcp_connection activeConnections[MAX_CONNECTION_OBJECTS];
@@ -43,13 +46,15 @@ typedef struct remote_ip {
 
 
 int compare_addr(struct sockaddr_in *first, struct sockaddr_in *second) {
-  return (first->sin_addr.s_addr == second->sin_addr.s_addr) && (first->sin_port == second->sin_port);
+  return (first->sin_addr.s_addr == second->sin_addr.s_addr) &&
+         (first->sin_port == second->sin_port);
 }
 
 int compare_addr6(struct sockaddr_in6 *first, struct sockaddr_in6 *second) {
   int match = 1;
   for (int i = 0; i < 4; i++) {
-    if (first->sin6_addr.__in6_u.__u6_addr32[i] != second->sin6_addr.__in6_u.__u6_addr32[i]) {
+    if (first->sin6_addr.__in6_u.__u6_addr32[i] !=
+        second->sin6_addr.__in6_u.__u6_addr32[i]) {
       match = 0;
       break;
     }
@@ -87,26 +92,40 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
   // Got a linked list of candidate addresses
   struct addrinfo *candidate = NULL;
   for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
-      if (candidate->ai_protocol != IPPROTO_TCP) { continue; }
-      if (candidate->ai_socktype != SOCK_STREAM) { continue; }
-      if (protocol == IPV4) { if (candidate->ai_family != AF_INET) { continue; }}
-      if (protocol == IPV6) { if (candidate->ai_family != AF_INET6) { continue; }}
+    if (candidate->ai_protocol != IPPROTO_TCP) {
+      continue;
+    }
+    if (candidate->ai_socktype != SOCK_STREAM) {
+      continue;
+    }
+    if (protocol == IPV4) {
+      if (candidate->ai_family != AF_INET) {
+        continue;
+      }
+    }
+    if (protocol == IPV6) {
+      if (candidate->ai_family != AF_INET6) {
+        continue;
+      }
+    }
 
-      int candidateSocket = 0;
-      if ((candidateSocket = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol)) != -1) {
-        int rc = 0;
-        // DEBUG
-        int yes = 1;
-        setsockopt(candidateSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-        if (doBind) {
-          if ((rc = bind(candidateSocket, candidate->ai_addr, candidate->ai_addrlen)) != -1) {
-            return candidateSocket;
-          }
-        } else {
+    int candidateSocket = 0;
+    if ((candidateSocket = socket(candidate->ai_family, candidate->ai_socktype,
+                                  candidate->ai_protocol)) != -1) {
+      int rc = 0;
+      // DEBUG
+      int yes = 1;
+      setsockopt(candidateSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+      if (doBind) {
+        if ((rc = bind(candidateSocket, candidate->ai_addr,
+                       candidate->ai_addrlen)) != -1) {
           return candidateSocket;
         }
-        close(candidateSocket);
+      } else {
+        return candidateSocket;
       }
+      close(candidateSocket);
+    }
   }
   return -1;
 }
@@ -127,64 +146,69 @@ void Initialize() {
   }
 }
 
-void free_sock_addresses(remote_ips ips) {
-  free(ips.ips);
-}
+void free_sock_addresses(remote_ips ips) { free(ips.ips); }
 
-remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len) {
+remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips,
+                                      char **ports, int len) {
   remote_ips ipList = {0};
   ipList.ips = malloc(sizeof(remote_ip) * len);
 
   int rc = -1;
-   for (int i = 0; i < len; i++) {
-      struct addrinfo *res = NULL;
-      struct addrinfo hints = {0};
+  for (int i = 0; i < len; i++) {
+    struct addrinfo *res = NULL;
+    struct addrinfo hints = {0};
 
-      hints.ai_socktype = SOCK_STREAM;
-      // query the connection to get the requested IP version.
-      switch (conn->options.ver) {
-        case IPV4:
-          hints.ai_family = AF_INET;
-          break;
-        case IPV6:
-          hints.ai_family = AF_INET6;
-          break;
-        case DONT_CARE:
-        default:
-          hints.ai_family = AF_INET;
-          break;
-      }
-      
-      // Get address info for each requested ip/port combination.
-      if ((rc = getaddrinfo(ips[i], ports[i], &hints, &res)) == 0) {
-        // Got a linked list of candidate addresses
-        struct addrinfo *candidate = NULL;
-        for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
-          if (candidate->ai_protocol != IPPROTO_TCP) { continue; }
-          if (candidate->ai_socktype != SOCK_STREAM) { continue; }
-          // We need to copy the sockaddr_in into our new array buffer,
-          // since we are going to free the linked list we got from the OS 
-          // at the end of this function call.
-          if (candidate->ai_family == AF_INET) {
-            remote_ip ip = {0};
-            ip.protocolVer = IPV4;
-            memcpy(&ip.ipData.ipv4, (struct sockaddr_in*)candidate->ai_addr, sizeof(struct sockaddr_in));
-            ipList.ips[ipList.len] = ip;
-            ipList.len += 1;
-            break;
-          } else {
-            remote_ip ip = {0};
-            ip.protocolVer = IPV6;
-            memcpy(&ip.ipData.ipv6, (struct sockaddr_in6*)candidate->ai_addr, sizeof(struct sockaddr_in6));
-            ipList.ips[ipList.len] = ip;
-            ipList.len += 1;
-            break;
-          }
+    hints.ai_socktype = SOCK_STREAM;
+    // query the connection to get the requested IP version.
+    switch (conn->options.ver) {
+      case IPV4:
+        hints.ai_family = AF_INET;
+        break;
+      case IPV6:
+        hints.ai_family = AF_INET6;
+        break;
+      case DONT_CARE:
+      default:
+        hints.ai_family = AF_INET;
+        break;
+    }
+
+    // Get address info for each requested ip/port combination.
+    if ((rc = getaddrinfo(ips[i], ports[i], &hints, &res)) == 0) {
+      // Got a linked list of candidate addresses
+      struct addrinfo *candidate = NULL;
+      for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
+        if (candidate->ai_protocol != IPPROTO_TCP) {
+          continue;
         }
-        freeaddrinfo(res);
+        if (candidate->ai_socktype != SOCK_STREAM) {
+          continue;
+        }
+        // We need to copy the sockaddr_in into our new array buffer,
+        // since we are going to free the linked list we got from the OS
+        // at the end of this function call.
+        if (candidate->ai_family == AF_INET) {
+          remote_ip ip = {0};
+          ip.protocolVer = IPV4;
+          memcpy(&ip.ipData.ipv4, (struct sockaddr_in *)candidate->ai_addr,
+                 sizeof(struct sockaddr_in));
+          ipList.ips[ipList.len] = ip;
+          ipList.len += 1;
+          break;
+        } else {
+          remote_ip ip = {0};
+          ip.protocolVer = IPV6;
+          memcpy(&ip.ipData.ipv6, (struct sockaddr_in6 *)candidate->ai_addr,
+                 sizeof(struct sockaddr_in6));
+          ipList.ips[ipList.len] = ip;
+          ipList.len += 1;
+          break;
+        }
       }
-   }
-   return ipList;
+      freeaddrinfo(res);
+    }
+  }
+  return ipList;
 }
 
 tcp_connection *create_tcp_connection(conn_opt opt) {
@@ -201,8 +225,12 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
       activeConnections[i].maxIncomingFDs = 10;
       activeConnections[i].outgoingFDs = malloc(sizeof(int) * 10);
       activeConnections[i].maxOutgoingFDs = 10;
-      activeConnections[i].listenSockFD = generate_listen_socket(activeConnections[i].options.ver, activeConnections[i].options.port_num);
-      if (activeConnections[i].listenSockFD == -1) { return NULL; }
+      activeConnections[i].listenSockFD =
+          generate_listen_socket(activeConnections[i].options.ver,
+                                 activeConnections[i].options.port_num);
+      if (activeConnections[i].listenSockFD == -1) {
+        return NULL;
+      }
       return &activeConnections[i];
     }
   }
@@ -210,7 +238,9 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
 }
 
 int destroy_tcp_connection(tcp_connection *conn) {
-  if (conn == NULL) { return -1; }
+  if (conn == NULL) {
+    return -1;
+  }
 
   for (int i = 0; i < conn->numIncomingFDs; i++) {
     close(conn->incomingFDs[i]);
@@ -223,7 +253,7 @@ int destroy_tcp_connection(tcp_connection *conn) {
   free(conn->incomingFDs);
   free(conn->outgoingFDs);
   memset(conn, 0, sizeof(tcp_connection));
-  conn->uid = -1; // Mark this slot as free
+  conn->uid = -1;  // Mark this slot as free
   return 0;
 }
 
@@ -237,21 +267,24 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
   int newFD = -1;
   if (ip->protocolVer == AF_INET) {
     socklen_t addrlen = sizeof(ip->ipData.ipv4);
-    newFD = accept(conn->listenSockFD, (struct sockaddr*)&ip->ipData.ipv4, &addrlen);
+    newFD = accept(conn->listenSockFD, (struct sockaddr *)&ip->ipData.ipv4,
+                   &addrlen);
   } else {
     socklen_t addrlen = sizeof(ip->ipData.ipv6);
-    newFD = accept(conn->listenSockFD, (struct sockaddr*)&ip->ipData.ipv6, &addrlen);
+    newFD = accept(conn->listenSockFD, (struct sockaddr *)&ip->ipData.ipv6,
+                   &addrlen);
   }
   if (newFD == -1) {
     return NULL;
   }
-  // Add to current connections 
+  // Add to current connections
   conn->numIncomingFDs += 1;
   if (conn->numIncomingFDs > conn->maxIncomingFDs) {
     conn->maxIncomingFDs *= 2;
-    conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
+    conn->incomingFDs =
+        realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
   }
-  conn->incomingFDs[conn->numIncomingFDs-1] = newFD;
+  conn->incomingFDs[conn->numIncomingFDs - 1] = newFD;
   ip->fd = newFD;
   return ip;
 }
@@ -262,42 +295,45 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
     int rc = -1;
     int sockfd = generate_socket(remotes.ips[i], 0, 0);
     if (remotes.ips[i].protocolVer == IPV4) {
-      struct sockaddr *convert = (struct sockaddr *)(&(remotes.ips[i].ipData.ipv4));
+      struct sockaddr *convert =
+          (struct sockaddr *)(&(remotes.ips[i].ipData.ipv4));
       socklen_t addrlen = sizeof(*convert);
       if ((rc = connect(sockfd, convert, addrlen)) == -1) {
         succeedAll = 0;
         close(sockfd);
         continue;
       }
-      // Add to current connections 
+      // Add to current connections
       conn->numOutgoingFDs += 1;
       if (conn->numOutgoingFDs > conn->maxOutgoingFDs) {
         conn->maxOutgoingFDs *= 2;
-        conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
+        conn->outgoingFDs =
+            realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
       }
-      conn->outgoingFDs[conn->numOutgoingFDs-1] = sockfd;
+      conn->outgoingFDs[conn->numOutgoingFDs - 1] = sockfd;
       remotes.ips[i].fd = sockfd;
     } else {
-      struct sockaddr *convert = (struct sockaddr *)(&remotes.ips[i].ipData.ipv6);
+      struct sockaddr *convert =
+          (struct sockaddr *)(&remotes.ips[i].ipData.ipv6);
       socklen_t addrlen = sizeof(*convert);
       if ((rc = connect(sockfd, convert, addrlen)) == -1) {
         succeedAll = 0;
         close(sockfd);
         continue;
       }
-      // Add to current connections 
+      // Add to current connections
       conn->numOutgoingFDs += 1;
       if (conn->numOutgoingFDs > conn->maxOutgoingFDs) {
         conn->maxOutgoingFDs *= 2;
-        conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
+        conn->outgoingFDs =
+            realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
       }
-      conn->outgoingFDs[conn->numOutgoingFDs-1] = sockfd;
+      conn->outgoingFDs[conn->numOutgoingFDs - 1] = sockfd;
       remotes.ips[i].fd = sockfd;
     }
   }
   return succeedAll;
 }
-
 
 remote_ips tcp_active_accepts(tcp_connection *conn) {
   remote_ips ips;
@@ -310,9 +346,9 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
     socklen_t addrlen = sizeof(addr);
     getpeername(conn->incomingFDs[i], &addr, &addrlen);
     if (ip.protocolVer == IPV4) {
-      ip.ipData.ipv4 = *(struct sockaddr_in*)&addr;
+      ip.ipData.ipv4 = *(struct sockaddr_in *)&addr;
     } else {
-      ip.ipData.ipv6 = *(struct sockaddr_in6*)&addr;
+      ip.ipData.ipv6 = *(struct sockaddr_in6 *)&addr;
     }
     ip.fd = conn->incomingFDs[i];
     ips.ips[i] = ip;
@@ -331,9 +367,9 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
     socklen_t addrlen = sizeof(addr);
     getpeername(conn->outgoingFDs[i], &addr, &addrlen);
     if (ip.protocolVer == IPV4) {
-      ip.ipData.ipv4 = *(struct sockaddr_in*)&addr;
+      ip.ipData.ipv4 = *(struct sockaddr_in *)&addr;
     } else {
-      ip.ipData.ipv6 = *(struct sockaddr_in6*)&addr;
+      ip.ipData.ipv6 = *(struct sockaddr_in6 *)&addr;
     }
     ip.fd = conn->outgoingFDs[i];
     ips.ips[i] = ip;
@@ -343,7 +379,6 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
 
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
-
   int numSends = 0;
   for (int i = 0; i < remotes.len; i++) {
     int rc = send(remotes.ips[i].fd, data, len, 0);
@@ -354,14 +389,18 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
   return numSends;
 }
 
-int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
+int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx,
+                        void **data, size_t *len) {
   *data = malloc(RECV_BUF_SIZE);
-  if (senderIdx > ips.len - 1) { return -1; }
+  if (senderIdx > ips.len - 1) {
+    return -1;
+  }
   remote_ip *sender = &ips.ips[senderIdx];
   return recv(sender->fd, *data, RECV_BUF_SIZE, 0);
 }
 
-int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
+int receive_tcp_message_async(tcp_connection *conn, remote_ips ips,
+                              int senderIdx, void **data, size_t *len) {
   // TODO
   return 0;
 }
@@ -376,7 +415,8 @@ int destroy_udp_connection() {
   // TODO
 }
 
-remote_ips process_udp_sock_addresses(udp_connection *conn, char **ips, char **ports, int len) {
+remote_ips process_udp_sock_addresses(udp_connection *conn, char **ips,
+                                      char **ports, int len) {
   // TODO
   remote_ips remotes = {0};
   return remotes;
