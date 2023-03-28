@@ -9,7 +9,6 @@
 #pragma comment(lib, "ws2_32.lib")
 
 typedef struct tcp_connection {
-  // TODO: not finished
   int listenSockFD;
   int *dataFDs;
   size_t numDataFDs;
@@ -27,7 +26,6 @@ typedef struct udp_connection {
 } udp_connection;
 
 typedef struct remote_ip {
-  // TODO: not finished
   int protocolVer;
   union {
     struct sockaddr_in ipv4;
@@ -55,7 +53,6 @@ void free_sock_addresses(remote_ips ips) {
 }
 
 remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len) {
-  // TODO
   remote_ips ipList = {0};
   ipList.ips = malloc(sizeof(remote_ip) * len);
 
@@ -79,7 +76,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **p
       break;
     }
 
-    // filter the hints before getaddrinfo()
+    // tell getaddrinfo() what it should look for
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
@@ -112,11 +109,21 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **p
 }
 
 tcp_connection *create_tcp_connection(conn_opt opt) {
-  // TODO
+  for (int i = 0; i < MAX_CONNECTION_OBJECTS; i++) {
+    if (activeConnections[i].uid == -1) {
+      activeConnections[i].uid = nextUID++;
+      activeConnections[i].options = opt;
+      return &activeConnections[i];
+    }
+  }
+  return NULL;
 }
 
 int destroy_tcp_connection(tcp_connection *conn) {
-  // TODO
+  if (conn == NULL) return -1;
+  conn->uid = -1;
+
+  // TODO: close corresponding TCP connection and free allocated memory
 }
 
 remote_ip *tcp_listen(tcp_connection *conn) {
