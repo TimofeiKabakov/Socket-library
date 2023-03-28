@@ -131,7 +131,57 @@ remote_ip *tcp_listen(tcp_connection *conn) {
 }
 
 int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
-  // TODO
+
+  /* Iterate over the remote_ips struct and establish connection with every ip inside of it */
+  for(int i = 0; i < remotes.len; i++) {
+    SOCKET ConnectSocket = INVALID_SOCKET;
+
+    socklen_t sockaddr_length;
+    struct sockaddr *sockaddr_to_connect;
+
+    /* 
+      The address family specification argument in socket() call is defined depending on the 
+      version of the IP indicated in `tcp_connection *conn` parameter 
+    */
+    ConnectSocket = socket(conn->options->ver, SOCK_STREAM, IPPROTO_TCP);
+
+    /* Check for errors after calling socket() */
+    if (ConnectSocket == INVALID_SOCKET) {
+      printf("Error at socket(): %ld\n", WSAGetLastError());
+      freeaddrinfo(result);
+      WSACleanup();
+      return 1;
+    }
+
+    /*
+      Extract the ip address of the required version from the remote_ip union
+      and cast it to the sockaddr pointer. 
+    */
+    if (conn->options->ver == AF_INET) {
+      sockaddr_to_connect = (struct sockaddr*) &remotes[i].ipData.ipv4;
+      sockaddr_length = sizeof(struct sockaddr_in);
+    } else {
+      sockaddr_to_connect = (struct sockaddr*) &remotes[i].ipData.ipv6;
+      sockaddr_length = sizeof(struct sockaddr_in6);
+    }
+
+    /* Establish the connection */
+    iResult = connect(ConnectSocket, sockaddr_to_connect, sockaddr_length);
+
+    /* Check for errors after calling connect() */
+    if (iResult == SOCKET_ERROR) {
+        closesocket(ConnectSocket);  
+        ConnectSocket = INVALID_SOCKET;
+    }
+
+    if (ConnectSocket == INVALID_SOCKET) {
+        printf("Unable to connect!\n");
+        WSACleanup();
+        return 1;
+    }
+  }
+
+  return 0;
 }
 
 remote_ips *tcp_active_connections(tcp_connection *conn) {
