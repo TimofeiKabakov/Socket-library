@@ -143,12 +143,11 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
       The address family specification argument in socket() call is defined depending on the 
       version of the IP indicated in `tcp_connection *conn` parameter 
     */
-    ConnectSocket = socket(conn->options->ver, SOCK_STREAM, IPPROTO_TCP);
+    ConnectSocket = socket(conn->options.ver, SOCK_STREAM, IPPROTO_TCP);
 
     /* Check for errors after calling socket() */
     if (ConnectSocket == INVALID_SOCKET) {
       printf("Error at socket(): %ld\n", WSAGetLastError());
-      freeaddrinfo(result);
       WSACleanup();
       return 1;
     }
@@ -157,14 +156,15 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
       Extract the ip address of the required version from the remote_ip union
       and cast it to the sockaddr pointer. 
     */
-    if (conn->options->ver == AF_INET) {
-      sockaddr_to_connect = (struct sockaddr*) &remotes[i].ipData.ipv4;
+    if (conn->options.ver == AF_INET) {
+      sockaddr_to_connect = (struct sockaddr*) &remotes.ips[i].ipData.ipv4;
       sockaddr_length = sizeof(struct sockaddr_in);
     } else {
-      sockaddr_to_connect = (struct sockaddr*) &remotes[i].ipData.ipv6;
+      sockaddr_to_connect = (struct sockaddr*) &remotes.ips[i].ipData.ipv6;
       sockaddr_length = sizeof(struct sockaddr_in6);
     }
 
+    int iResult = -1;
     /* Establish the connection */
     iResult = connect(ConnectSocket, sockaddr_to_connect, sockaddr_length);
 
