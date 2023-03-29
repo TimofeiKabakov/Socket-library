@@ -33,7 +33,7 @@ typedef struct remote_ip {
   } ipData;
 } remote_ip;
 
-int Initialize() {
+void Initialize() {
   // WSAStartup initiates use of WS2_32.dll
   int rc = WSAStartup(MAKEWORD(2,2), &wsaData);
   if (rc != 0) {
@@ -126,7 +126,7 @@ int destroy_tcp_connection(tcp_connection *conn) {
   // TODO: close corresponding TCP connection and free allocated memory
 }
 
-remote_ip *tcp_listen(tcp_connection *conn) {
+int tcp_listen(tcp_connection *conn) {
   // TODO
 }
 
@@ -193,11 +193,11 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
   // TODO
 }
 
-int receive_tcp_message_async(tcp_connection *conn, void **data, size_t *len) {
+int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
   // TODO
 }
 
-int receive_tcp_message(tcp_connection *conn, void **data, size_t *len) {
+int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
   // TODO
 }
 
@@ -224,5 +224,17 @@ remote_ip *receive_udp_message_async(udp_connection *conn, void **data,
 }
 
 remote_ip *receive_udp_message(udp_connection *conn, void **data, size_t *len) {
+  // TODO
+}
+
+remote_ips tcp_active_connects(tcp_connection *conn) {
+  // TODO
+}
+
+remote_ips tcp_active_accepts(tcp_connection *conn) {
+  // TODO
+}
+
+remote_ip *accept_remote_connection(tcp_connection *conn) {
   // TODO
 }
