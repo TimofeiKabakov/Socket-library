@@ -38,7 +38,7 @@ typedef struct remote_ips {
  *
  * @return 0 on success, or a nonzero error code if an error occured.
  */
-int Initialize();
+void Initialize();
 /**
  * @brief Frees a set of ip structs allocated by the library.
  * 
@@ -75,7 +75,6 @@ void free_sock_addresses(remote_ips ips);
  * @return A struct representing an array of remote_ip structs.
  */
 remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len);
-
 /**
  * @brief Creates a new tcp connection
  *
@@ -94,13 +93,22 @@ int destroy_tcp_connection(tcp_connection *conn);
 /**
  * @brief Listens for incoming connections.
  *
- * A process can use this blocking function to wait for and establish
- * incoming connections.
+ * A process can use this function to mark itself as listening for a remote connection.
+ * The connection will listen on the port number provided by the conn_opt struct.
  *
  * @param conn The connection object to listen with.
- * @return The IP struct of the newly connected remote host.
+ * @return 1 if the connection is successfully listening, 0 if failure occured
  */
-remote_ip *tcp_listen(tcp_connection *conn);
+int tcp_listen(tcp_connection *conn);
+/**
+ * @brief Wait for incoming remote connections on a listen port and accept them.
+ * 
+ * This call will block until a newly accepted connection is available.
+ * 
+ * @param conn The connection to wait with
+ * @return remote_ip* The address of the remote host that just connected, or NULL if an error occured
+ */
+remote_ip *accept_remote_connection(tcp_connection *conn);
 /**
  * @brief Establish a connection to a remote host.
  *
@@ -115,16 +123,19 @@ remote_ip *tcp_listen(tcp_connection *conn);
  */
 int tcp_connect_remote(tcp_connection *conn, remote_ips remotes);
 /**
- * @brief Returns a list of the currently connected remote hosts.
- *
- * Upon return of this function, caller receives a list of remote hosts that it
- * is currently connected to as a result of either tcp_listen or
- * tcp_connect_remote.
+ * @brief Returns a list of the currently connected hosts through tcp_active_accepts
  *
  * @param conn The connection object to query remote hosts on.
  * @return A list of remote hosts.
  */
-remote_ips *tcp_active_connections(tcp_connection *conn);
+remote_ips tcp_active_accepts(tcp_connection *conn);
+/**
+ * @brief Returns a list of the currently connected hosts through accept_remote_connection
+ *
+ * @param conn The connection object to query remote hosts on.
+ * @return A list of remote hosts.
+ */
+remote_ips tcp_active_connects(tcp_connection *conn);
 /**
  * @brief Sends a tcp data transmission to hosts represented by remotes
  *
@@ -133,7 +144,7 @@ remote_ips *tcp_active_connections(tcp_connection *conn);
  * Multiple IP addresses represents a multicast transmission to multiple hosts.
  * @param data A pointer to the data to send.
  * @param len The length of the data to send, in bytes.
- * @return 0 on success, or a nonzero value if an error occured
+ * @return The number of remote hosts that were successfully sent to.
  */
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len);
@@ -141,11 +152,13 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
  * @brief Retrieves a pending TCP message, blocking if none exists.
  *
  * @param conn The connection to use for this transmission.
+ * @param ips a list of ips containing the desired sender to listen for a message from
+ * @param senderIdx The index of ips containing the desired sender
  * @param data A pointer to a pointer that will hold the received message
  * @param len The length of the received message, in bytes
  * @return 0 on success, or a nonzero value if an error occured.
  */
-int receive_tcp_message(tcp_connection *conn, void **data, size_t *len);
+int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len);
 /**
  * @brief Retrieves a pending TCP message, if one exists.
  *
@@ -153,17 +166,14 @@ int receive_tcp_message(tcp_connection *conn, void **data, size_t *len);
  * receive_tcp_message. It will immediately return, with data set to NULL, if no
  * transmission is ready to be received.
  *
- * If this function returns an error, the values of data and len are
- * implementation defined and should not be relied on.
- *
- * @param conn The connection to use for this transmission
- * @param data A pointer to a pointer that will hold the received message, or
- * NULL if there was no message
- * @param len The length of the message, in bytes, if there was a message ready
- * to be received.
+ * @param conn The connection to use for this transmission.
+ * @param ips a list of ips containing the desired sender to listen for a message from
+ * @param senderIdx The index of ips containing the desired sender
+ * @param data A pointer to a pointer that will hold the received message
+ * @param len The length of the received message, in bytes
  * @return 0 on success, or a nonzero value if an error occured.
  */
-int receive_tcp_message_async(tcp_connection *conn, void **data, size_t *len);
+int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len);
 
 /**
  * @brief Create a new udp connection.
