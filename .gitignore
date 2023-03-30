@@ -1,3 +1,4 @@
+.vscode
 build/*
 docs/*.aux
 docs/*.fdb_latexmk

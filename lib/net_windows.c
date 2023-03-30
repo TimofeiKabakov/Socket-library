@@ -1,19 +1,51 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <Windows.h>
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+
 #include "net.h"
 
+#pragma comment(lib, "ws2_32.lib")
+
 typedef struct tcp_connection {
-  // TODO
+  int listenSockFD;
+  int *dataFDs;
+  size_t numDataFDs;
+  conn_opt options;
+  int uid;
 } tcp_connection;
+
+WSADATA wsaData; // contains information about the Windows Sockets implementation
+tcp_connection activeConnections[MAX_CONNECTION_OBJECTS];
+size_t connObjects = 0;
+int nextUID = 0;
 
 typedef struct udp_connection {
   // TODO
 } udp_connection;
 
 typedef struct remote_ip {
-  // TODO
+  int protocolVer;
+  union {
+    struct sockaddr_in ipv4;
+    struct sockaddr_in6 ipv6;
+  } ipData;
 } remote_ip;
 
 int Initialize() {
-  // TODO
+  // WSAStartup initiates use of WS2_32.dll
+  int rc = WSAStartup(MAKEWORD(2,2), &wsaData);
+  if (rc != 0) {
+    printf("WSAStartup failed: %d\n", rc);
+    return 1;
+  }
+
+  for (int i = 0; i < MAX_CONNECTION_OBJECTS; i++) {
+    activeConnections[i].uid = -1;
+    activeConnections[i].listenSockFD = -1;
+    activeConnections[i].numDataFDs = 0;
+  }
 }
 
 void free_sock_addresses(remote_ips ips) {
@@ -21,15 +53,77 @@ void free_sock_addresses(remote_ips ips) {
 }
 
 remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len) {
-  // TODO
+  remote_ips ipList = {0};
+  ipList.ips = malloc(sizeof(remote_ip) * len);
+
+  int rc = -1;
+  for (int i = 0; i < len; i++) {
+    struct addrinfo *res = NULL, *ptr = NULL, hints;
+
+    // TODO: ZeroMemory() wraps memset(), need to figure out which one is better
+    // microsoft documentation uses ZeroMemory()
+    ZeroMemory(&hints, sizeof hints);
+    
+    switch (conn->options.ver) {
+    case IPV4:
+      hints.ai_family = AF_INET;
+      break;
+    case IPV6:
+      hints.ai_family = AF_INET6;
+    case DONT_CARE:
+    default:
+      hints.ai_family = AF_UNSPEC;
+      break;
+    }
+
+    // tell getaddrinfo() what it should look for
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    if ((rc = getaddrinfo(ips[i], ports[i], &hints, &res)) == 0) {
+      struct addrinfo *candidate = NULL;
+      // TODO: research on whether this loop is neccessary, because now it's 
+      // logically inexistent, maybe we can use it to check other stuff, maybe 
+      // we need to remove it
+      for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
+        remote_ip ip = {0};
+
+        if (candidate->ai_family == AF_INET) {
+          ip.protocolVer = AF_INET;
+          memcpy(&ip.ipData.ipv4, (struct sockaddr_in*)candidate->ai_addr, sizeof(struct sockaddr_in));
+        } else {
+          ip.protocolVer = AF_INET6;
+          memcpy(&ip.ipData.ipv6, (struct sockaddr_in6*)candidate->ai_addr, sizeof(struct sockaddr_in6));
+        }
+
+        ipList.ips[ipList.len] = ip;
+        ipList.len++;
+        break;
+      }
+      freeaddrinfo(res);
+      // TODO: should WSAClenup() be put here?
+      WSACleanup();
+    }
+  }
+  return ipList;
 }
 
 tcp_connection *create_tcp_connection(conn_opt opt) {
-  // TODO
+  for (int i = 0; i < MAX_CONNECTION_OBJECTS; i++) {
+    if (activeConnections[i].uid == -1) {
+      activeConnections[i].uid = nextUID++;
+      activeConnections[i].options = opt;
+      return &activeConnections[i];
+    }
+  }
+  return NULL;
 }
 
 int destroy_tcp_connection(tcp_connection *conn) {
-  // TODO
+  if (conn == NULL) return -1;
+  conn->uid = -1;
+
+  // TODO: close corresponding TCP connection and free allocated memory
 }
 
 remote_ip *tcp_listen(tcp_connection *conn) {
