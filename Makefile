@@ -27,7 +27,7 @@ net_linux.o: lib/net_linux.c lib/net.h
 	gcc -o net_linux.o -c $(CFLAGS) lib/net_linux.c
 
 example-clientWin: example-client.o libSockWin.a lib/net.h
-	gcc $(CFLAGS) -o example-client example-client.o libSockWin.a
+	gcc $(CFLAGS) -o example-client example-client.o libSockWin.a -lws2_32
 
 example-clientLin: example-client.o libSockLin.a lib/net.h
 	gcc $(CFLAGS) -o example-client example-client.o libSockLin.a
@@ -36,7 +36,7 @@ example-client.o: example-client.c
 	gcc $(CFLAGS) -c -o example-client.o example-client.c
 
 example-serverWin: example-server.o libSockWin.a lib/net.h
-	gcc $(CFLAGS) -o example-server example-server.o libSockWin.a
+	gcc $(CFLAGS) -o example-server example-server.o libSockWin.a -lws2_32
 
 example-serverLin: example-server.o libSockLin.a lib/net.h
 	gcc $(CFLAGS) -o example-server example-server.o libSockLin.a
