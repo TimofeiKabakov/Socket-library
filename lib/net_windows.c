@@ -1,8 +1,8 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <Windows.h>
+#include <stdio.h>
 
 #include "net.h"
 
@@ -311,11 +311,17 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
   // TODO: test needed
-  int rc, nSent = 0;
-  for (int i = 0; i < remotes.len; i++)
-  {
-    rc = send(remotes.ips[i].handle->fd, data, len, 0);
-    if (rc > 0) {
+  int nBytesSent, nSent = 0;
+  for (int i = 0; i < remotes.len; i++) {
+    nBytesSent = send(remotes.ips[i].handle->fd, data, len, 0);
+    if (nBytesSent == SOCKET_ERROR) {
+      // connection is closed, update the structs
+
+      int disconnectedFD = remotes.ips[i].handle->fd;
+
+      for (int j = i; j < remotes.len; j++) {
+      }
+    } else {
       nSent++;
     }
   }
@@ -331,7 +337,7 @@ int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderId
 
   remote_ip *sender = &ips.ips[senderIdx];
 
-  struct timeval timeval = {0};
+  TIMEVAL timeval = {0};
   timeval.tv_sec = 0;
   timeval.tv_usec = conn->options.timeout;
   fd_set singleset;
