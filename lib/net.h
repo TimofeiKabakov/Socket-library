@@ -129,6 +129,10 @@ remote_ip *accept_remote_connection(tcp_connection *conn);
 int tcp_connect_remote(tcp_connection *conn, remote_ips remotes);
 /**
  * @brief Returns a list of the currently connected hosts through tcp_active_accepts
+ * 
+ * Note that the returned list reflects only the connections at the time of this call. Connections 
+ * that are added or removed after a call to this function will require the user to subsequently call 
+ * this function again to get a new, updated list. 
  *
  * @param conn The connection object to query remote hosts on.
  * @return A list of remote hosts.
@@ -136,6 +140,10 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes);
 remote_ips tcp_active_accepts(tcp_connection *conn);
 /**
  * @brief Returns a list of the currently connected hosts through accept_remote_connection
+ * 
+ * Note that the returned list reflects only the connections at the time of this call. Connections 
+ * that are added or removed after a call to this function will require the user to subsequently call 
+ * this function again to get a new, updated list. 
  *
  * @param conn The connection object to query remote hosts on.
  * @return A list of remote hosts.
@@ -179,83 +187,4 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, voi
  * @return The number of bytes read on success, 0 if no new data to read or if error occured.
  */
 int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len);
-
-/**
- * @brief Create a new udp connection.
- *
- * @param opt A struct of possible options that can be used to configure the
- * connection
- * @return A pointer to the newly created connection, or NULL
- * if an error occured.
- */
-udp_connection *create_udp_connection(conn_opt opt);
-/**
- * @brief Releases an existing udp connection
- *
- * @return 0 on success, or a nonzero value if an error occured.
- */
-int destroy_udp_connection();
-/**
- * @brief Process a list of plaintext IPs for use by the library.
- *
- * IP addresses must undergo OS-specific processing in order to produce structs
- * compatible with underlying syscalls. This function can be used to translate
- * one or more IPs stored as plaintext into these OS-specific structs ahead of
- * time, avoiding multiple costly string comparisons.
- * 
- * The length of the two string arrays ips and ports must be equal to len. There 
- * must be one port for each ip, and vice versa. 
- * 
- * If any of the ip/port pairs cannot be resolved due to an underlying platform error, 
- * only the ip/port pairs that were successfully resolved will be returned.
- *
- * @param conn The connection object used for this query. 
- * @param ips An array of strings, each string representing a null-terminated IP
- * address in the traditional "dotted-decimal" format.
- * @param ports An array of strings, each string representing a null-terminated port
- * corresponding to a given IP address in ips.
- * @param len The number of elements in the ips array and the ports array. 
- * @return A struct representing an array of remote_ip structs.
- */
-remote_ips process_udp_sock_addresses(udp_connection *conn, char **ips, char **ports, int len);
-/**
- * @brief Sends a udp data transmission to hosts represented by remotes
- *
- * @param conn The connection to use for this transmission.
- * @param remotes A list of remote IP addresses to send this transmission to.
- * Multiple IP addresses represents a multicast transmission to multiple hosts.
- * @param data A pointer to the data to send.
- * @param len The length of the data to send, in bytes.
- * @return 0 on success, or a nonzero value if an error occured
- */
-int send_udp_message(udp_connection *conn, remote_ips remotes, void *data,
-                     size_t len);
-/**
- * @brief Retrieves a pending UDP message, blocking if none exists.
- *
- * @param conn The connection to use for this transmission.
- * @param data A pointer to a pointer that will hold the received message
- * @param len The length of the received message, in bytes
- * @return 0 on success, or a nonzero value if an error occured.
- */
-remote_ip *receive_udp_message(udp_connection *conn, void **data, size_t *len);
-/**
- * @brief Retrieves a pending UDP message, if one exists.
- *
- * This function is the asynchronous, nonblocking version of
- * receive_udp_message. It will immediately return, with data set to NULL, if no
- * transmission is ready to be received.
- *
- * If this function returns an error, the values of data and len are
- * implementation defined and should not be relied on.
- *
- * @param conn The connection to use for this transmission
- * @param data A pointer to a pointer that will hold the received message, or
- * NULL if there was no message
- * @param len The length of the message, in bytes, if there was a message ready
- * to be received.
- * @return 0 on success, or a nonzero value if an error occured.
- */
-remote_ip *receive_udp_message_async(udp_connection *conn, void **data,
-                                     size_t *len);
 #endif
