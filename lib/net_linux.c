@@ -50,11 +50,11 @@ typedef struct remote_ip_handle {
 } remote_ip_handle;
 
 
+// Internal functions for comparing sockaddr structs. 
 int compare_addr(struct sockaddr_in *first, struct sockaddr_in *second) {
   return (first->sin_addr.s_addr == second->sin_addr.s_addr) &&
          (first->sin_port == second->sin_port);
 }
-
 int compare_addr6(struct sockaddr_in6 *first, struct sockaddr_in6 *second) {
   int match = 1;
   for (int i = 0; i < 4; i++) {
@@ -64,14 +64,13 @@ int compare_addr6(struct sockaddr_in6 *first, struct sockaddr_in6 *second) {
       break;
     }
   }
-
   if (first->sin6_port == second->sin6_port) {
     match = 0;
   }
   return match;
 }
 
-// Private functions, for internal use only, not exposed to the external API
+// Internal function to generate a local socket and optionally bind it. 
 int generate_socket(remote_ip ip, int listen, int doBind) {
   int protocol = ip.handle->protocolVer == IPV4 ? AF_INET : AF_INET6;
   struct addrinfo hints = {0};
@@ -89,7 +88,8 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
     }
   } else {
     int rc = -1;
-    if ((rc = getaddrinfo(NULL, "0", &hints, &res)) != 0) {
+    // If its not a listen socket, we don't need to care what port we use for this local socket
+    if ((rc = getaddrinfo(ip.addr, "0", &hints, &res)) != 0) {
       return -1;
     }
   }
@@ -118,9 +118,10 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
     if ((candidateSocket = socket(candidate->ai_family, candidate->ai_socktype,
                                   candidate->ai_protocol)) != -1) {
       int rc = 0;
-      // DEBUG
+      // Don't wait for connection to time out after finishing. 
       int yes = 1;
       setsockopt(candidateSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+      // Not all local sockets should actually be bound
       if (doBind) {
         if ((rc = bind(candidateSocket, candidate->ai_addr,
                        candidate->ai_addrlen)) != -1) {
@@ -135,6 +136,7 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
   return -1;
 }
 
+// Special internal function that just calls generate_socket to create a socket specifically for listening. 
 int generate_listen_socket(int ver, int portNum) {
   remote_ip ip;
   ip.handle = malloc(sizeof(remote_ip_handle));
@@ -156,7 +158,14 @@ void Initialize() {
   }
 }
 
-void free_sock_addresses(remote_ips ips) { free(ips.ips); }
+void free_sock_addresses(remote_ips ips) { 
+  for (int i = 0; i < ips.len; i++) {
+    free(ips.ips[i].addr);
+    free(ips.ips[i].port);
+    free(ips.ips[i].handle);
+  }
+  free(ips.ips); 
+}
 
 remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips,
                                       const char **ports, int len) {
@@ -204,6 +213,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips,
           ip.handle->protocolVer = IPV4;
           memcpy(&ip.handle->ipData.ipv4, (struct sockaddr_in *)candidate->ai_addr,
                  sizeof(struct sockaddr_in));
+          // Store the string representation into the remote_ip object
           ip.addr = malloc(INET_ADDRSTRLEN+1);
           ip.port = malloc(6);
           strcpy(ip.addr, ips[i]);
@@ -218,6 +228,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips,
           ip.handle->protocolVer = IPV6;
           memcpy(&ip.handle->ipData.ipv6, (struct sockaddr_in6 *)candidate->ai_addr,
                  sizeof(struct sockaddr_in6));
+          // Store the string representation into the remote_ip object
           ip.addr = malloc(INET6_ADDRSTRLEN+1);
           ip.port = malloc(6);
           strcpy(ip.addr, ips[i]);
@@ -281,7 +292,8 @@ int destroy_tcp_connection(tcp_connection *conn) {
 }
 
 int tcp_listen(tcp_connection *conn) {
-  return listen(conn->listenSockFD, SOMAXCONN);
+  int rc = listen(conn->listenSockFD, SOMAXCONN);
+  return (rc == 0) ? 1 : 0;   // legacy api choice made this backwards
 }
 
 remote_ip *accept_remote_connection(tcp_connection *conn) {
@@ -294,6 +306,7 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
     socklen_t addrlen = sizeof(ip->handle->ipData.ipv4);
     newFD = accept(conn->listenSockFD, (struct sockaddr *)&ip->handle->ipData.ipv4,
                    &addrlen);
+    // Store string representation in ip struct.
     ip->addr = malloc(INET_ADDRSTRLEN+1);
     ip->port = malloc(6);
     inet_ntop(AF_INET, &((struct sockaddr_in *)&ip->handle->ipData.ipv4)->sin_addr, ip->addr, INET_ADDRSTRLEN+1);
@@ -302,6 +315,7 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
     socklen_t addrlen = sizeof(ip->handle->ipData.ipv6);
     newFD = accept(conn->listenSockFD, (struct sockaddr *)&ip->handle->ipData.ipv6,
                    &addrlen);
+    // Store string representation in ip struct.
     ip->addr = malloc(INET6_ADDRSTRLEN+1);
     ip->port = malloc(6);
     inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip->handle->ipData.ipv6)->sin6_addr, ip->addr, INET6_ADDRSTRLEN+1);
@@ -310,7 +324,7 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
   if (newFD == -1) {
     return NULL;
   }
-  // Add to current connections
+  // Add to current connections, increasing size of array if necessary
   conn->numIncomingFDs += 1;
   if (conn->numIncomingFDs > conn->maxIncomingFDs) {
     conn->maxIncomingFDs *= 2;
@@ -318,6 +332,7 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
         realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
   }
   conn->incomingFDs[conn->numIncomingFDs - 1] = newFD;
+  // Also store the fd in the ip struct so we associate these structs with fds. 
   ip->handle->fd = newFD;
   
   return ip;
@@ -363,7 +378,7 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
             realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
       }
       conn->outgoingFDs[conn->numOutgoingFDs - 1] = sockfd;
-      remotes.ips[i].handle->fd = sockfd;
+      remotes.ips[i].handle->fd = sockfd;   // Again, associate fd with ip struct.
     }
   }
   return succeedAll;
@@ -373,6 +388,7 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
   remote_ips ips;
   ips.len = conn->numIncomingFDs;
   ips.ips = malloc(sizeof(remote_ip) * ips.len);
+  // Loop over every fd, get peer info, construct an ip struct and add it. 
   for (int i = 0; i < ips.len; i++) {
     remote_ip ip;
     ip.handle = malloc(sizeof(remote_ip_handle));
@@ -404,6 +420,7 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
   remote_ips ips;
   ips.len = conn->numOutgoingFDs;
   ips.ips = malloc(sizeof(remote_ip) * ips.len);
+  // Loop over every fd, get peer info, construct an ip struct and add it. 
   for (int i = 0; i < ips.len; i++) {
     remote_ip ip;
     ip.handle = malloc(sizeof(remote_ip_handle));
