@@ -92,13 +92,13 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips, co
       for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
         remote_ip ip = {0};
 
-        if (candidate->ai_family == AF_INET) {
-          ip.protocolVer = AF_INET;
-          memcpy(&ip.ipData.ipv4, (struct sockaddr_in*)candidate->ai_addr, sizeof(struct sockaddr_in));
-        } else {
-          ip.protocolVer = AF_INET6;
-          memcpy(&ip.ipData.ipv6, (struct sockaddr_in6*)candidate->ai_addr, sizeof(struct sockaddr_in6));
-        }
+        // if (candidate->ai_family == AF_INET) {
+        //   ip.protocolVer = AF_INET;
+        //   memcpy(&ip.ipData.ipv4, (struct sockaddr_in*)candidate->ai_addr, sizeof(struct sockaddr_in));
+        // } else {
+        //   ip.protocolVer = AF_INET6;
+        //   memcpy(&ip.ipData.ipv6, (struct sockaddr_in6*)candidate->ai_addr, sizeof(struct sockaddr_in6));
+        // }
 
         ipList.ips[ipList.len] = ip;
         ipList.len++;
@@ -184,7 +184,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
         printf("Error generating a socket for this connection\n");
         return NULL;
       }
-
+      
       return &activeConnections[i];
     }
   }
@@ -192,7 +192,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
 }
 
 int destroy_tcp_connection(tcp_connection *conn) {
-    if (conn == NULL) {
+  if (conn == NULL) {
     return -1;
   }
 
@@ -208,6 +208,7 @@ int destroy_tcp_connection(tcp_connection *conn) {
   free(conn->outgoingFDs);
   memset(conn, 0, sizeof(tcp_connection));
   conn->uid = -1;  // Mark this slot as free
+  nextUID--;
   return 0;
 }
 
@@ -243,52 +244,18 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
       sockaddr_length = sizeof(struct sockaddr_in6);
     }
 
-    /* initiate socket file descriptor */
-    int iResult = -1;
-    struct addrinfo *result = NULL, hints;
-
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = remotes.ips[i].handle->protocolVer;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    /* IS IT RIGHT HERE????? */
-
-    /* get info for a particular port number provided in the opt parameter */
-    iResult = getaddrinfo(remotes.ips[i].addr, remotes.ips[i].port, &hints, &result);
-    if (iResult != 0) {
-        printf("getaddrinfo failed: %d\n", iResult);
-        WSACleanup();
-        return 0;
-    }
-
     SOCKET ConnectSocket = INVALID_SOCKET;
-    struct addrinfo *candidate = NULL;
+  
+    ConnectSocket = socket(remotes.ips[i].handle->protocolVer, SOCK_STREAM, IPPROTO_TCP); 
 
-    for (candidate = result; candidate != NULL; candidate = candidate->ai_next) {
-
-      ConnectSocket = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol); 
-
-      if (ConnectSocket == INVALID_SOCKET) {
-        printf("Error at socket(): %d\n", WSAGetLastError());
-        continue;
-      }
-
-      if (connect(ConnectSocket, sockaddr_to_connect, sockaddr_length) == SOCKET_ERROR) {
-        closesocket(ConnectSocket);  
-        ConnectSocket = INVALID_SOCKET;
-        continue;
-      }
-
-      break;
+    if (ConnectSocket == INVALID_SOCKET) {
+      printf("Error at socket(): %d\n", WSAGetLastError());
+      continue;
     }
 
-    freeaddrinfo(result);
-
-    if (candidate == NULL || ConnectSocket == INVALID_SOCKET) {
-      succeedAll = 0;
-      printf("failed to connect: %d\n", WSAGetLastError());
-      WSACleanup();
+    if (connect(ConnectSocket, sockaddr_to_connect, sockaddr_length) == SOCKET_ERROR) {
+      closesocket(ConnectSocket);  
+      ConnectSocket = INVALID_SOCKET;
       continue;
     }
     
