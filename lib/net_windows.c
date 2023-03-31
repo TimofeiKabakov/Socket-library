@@ -141,7 +141,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips, co
       ipList.len++;
 
       freeaddrinfo(res);
-      WSACleanup();
+      // WSACleanup();
     }
   }
   return ipList;
@@ -271,26 +271,26 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
       Extract the ip address of the required version from the remote_ip union
       and cast it to the sockaddr pointer. 
     */
-    if (remotes.ips[i].handle->protocolVer == AF_INET) {
+    SOCKET ConnectSocket = INVALID_SOCKET;
+    if (remotes.ips[i].handle->protocolVer == IPV4) {
       sockaddr_to_connect = (struct sockaddr*) &remotes.ips[i].handle->ipData.ipv4;
       sockaddr_length = sizeof(struct sockaddr_in);
+      ConnectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); 
     } else {
       sockaddr_to_connect = (struct sockaddr*) &remotes.ips[i].handle->ipData.ipv6;
       sockaddr_length = sizeof(struct sockaddr_in6);
+      ConnectSocket = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP); 
     }
-
-    SOCKET ConnectSocket = INVALID_SOCKET;
   
-    ConnectSocket = socket(remotes.ips[i].handle->protocolVer, SOCK_STREAM, IPPROTO_TCP); 
-
     if (ConnectSocket == INVALID_SOCKET) {
       printf("Error at socket(): %d\n", WSAGetLastError());
       continue;
     }
 
     if (connect(ConnectSocket, sockaddr_to_connect, sockaddr_length) == SOCKET_ERROR) {
-      closesocket(ConnectSocket);  
+      closesocket(ConnectSocket);
       ConnectSocket = INVALID_SOCKET;
+      printf("Error at connect()\n");
       continue;
     }
     
