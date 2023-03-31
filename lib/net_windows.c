@@ -23,6 +23,7 @@ typedef struct tcp_connection {
   conn_opt options;
   int uid;
   int protocolVerPlatSpecific;
+  SRWLOCK mutex;
 } tcp_connection;
 
 /* contains information about the Windows Sockets implementation */
@@ -163,9 +164,8 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
 
       /* initiate socket file descriptor */
       int iCandidate, iResult;
-      struct addrinfo *result = NULL, hints;
+      struct addrinfo *result = NULL, hints = {0};
 
-      ZeroMemory(&hints, sizeof(hints));
       hints.ai_family = activeConnections[i].options.ver;
       hints.ai_socktype = SOCK_STREAM;
       hints.ai_protocol = IPPROTO_TCP;
@@ -216,6 +216,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
 
       activeConnections[i].listenSockFD = ListenSocket;
 
+      InitializeSRWLock(&activeConnections[i].mutex);
       if (activeConnections[i].listenSockFD == -1) {
         printf("Error generating a socket for this connection\n");
         return NULL;
@@ -295,12 +296,14 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
     }
     
     /* If got here, it means we connected, we need to add the connection to outgoingFDs */
+    AcquireSRWLockExclusive(&conn->mutex);
     conn->numOutgoingFDs += 1;
     if (conn->numOutgoingFDs > conn->maxOutgoingFDs) {
       conn->maxOutgoingFDs *= 2;
       conn->outgoingFDs = realloc(conn->outgoingFDs, sizeof(int) * conn->maxOutgoingFDs);
     }
     conn->outgoingFDs[conn->numOutgoingFDs - 1] = ConnectSocket;
+    ReleaseSRWLockExclusive(&conn->mutex);
     remotes.ips[i].handle->fd = ConnectSocket;
   }
 
@@ -314,13 +317,30 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
   int nBytesSent, nSent = 0;
   for (int i = 0; i < remotes.len; i++) {
     nBytesSent = send(remotes.ips[i].handle->fd, data, len, 0);
+
+    /* connection with this ip is closed */
     if (nBytesSent == SOCKET_ERROR) {
-      // connection is closed, update the structs
-
       int disconnectedFD = remotes.ips[i].handle->fd;
-
-      for (int j = i; j < remotes.len; j++) {
+      
+      /* remove the disconnected fd from outgoing fds */
+      AcquireSRWLockExclusive(&conn->mutex);
+      for (int j = 0; j < conn->numOutgoingFDs; j++) {
+        if (conn->outgoingFDs[j] == disconnectedFD) {
+          /* TODO: why -1 not +1 */
+          conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
+          conn->numOutgoingFDs--;
+        }
       }
+
+      /* if the disconnected fd is also an incoming fd, remove it from incoming as well */
+      for (int j = 0; j < conn->numIncomingFDs; i++) {
+        if (conn->incomingFDs[j] == disconnectedFD) {
+          conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
+          conn->numIncomingFDs--;
+        }
+      }
+
+      ReleaseSRWLockExclusive(&conn->mutex);
     } else {
       nSent++;
     }
@@ -345,9 +365,30 @@ int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderId
   FD_ZERO(&singleset);
   FD_SET(sender->handle->fd, &singleset);
 
-  int res = select(sender->handle->fd + 1, &singleset, NULL, NULL, &timeval);
+  int nBytesRecved, res = select(sender->handle->fd + 1, &singleset, NULL, NULL, &timeval);
   if (res > 0 && FD_ISSET(sender->handle->fd, &singleset)) {
-    return recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
+    nBytesRecved = recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
+    
+    /* TODO: 0 or SOCKET_ERROR */
+    if (nBytesRecved == 0) {
+      AcquireSRWLockExclusive(&conn->mutex);
+      for (int j = 0; j < conn->numOutgoingFDs; j++) {
+        if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
+          conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
+          conn->numOutgoingFDs--;
+        }
+      }
+
+      for (int j = 0; j < conn->numIncomingFDs; j++) {
+        if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
+          conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
+          conn->numIncomingFDs--;
+        }
+      }
+
+      ReleaseSRWLockExclusive(&conn->mutex);
+    }
+    return nBytesRecved;
   } else {
     return 0;
   }
@@ -361,7 +402,27 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, voi
   }
 
   remote_ip *sender = &ips.ips[senderIdx];
-  return recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
+
+  int nBytesRecved = recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
+  if (nBytesRecved == 0) {
+    AcquireSRWLockExclusive(&conn->mutex);
+    for (int j = 0; j < conn->numOutgoingFDs; j++) {
+      if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
+        conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
+        conn->numOutgoingFDs--;
+      }
+    }
+
+    for (int j = 0; j < conn->numIncomingFDs; j++) {
+      if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
+        conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
+        conn->numIncomingFDs--;
+      }
+    }
+
+    ReleaseSRWLockExclusive(&conn->mutex);
+  }
+  return nBytesRecved;
 }
 
 remote_ips tcp_active_connects(tcp_connection *conn) {
@@ -445,7 +506,7 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
     }
 
     ip->addr = malloc(INET_ADDRSTRLEN + 1);
-    ip->port = malloc(6);
+    ip->port = malloc(PORT_STRLEN);
     inet_ntop(AF_INET, &((struct sockaddr_in *) &ip->handle->ipData.ipv4)->sin_addr, ip->addr, INET_ADDRSTRLEN+1);
     sprintf(ip->port, "%u", ip->handle->ipData.ipv4.sin_port);
   } else {
@@ -468,12 +529,14 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
     return NULL;
   }
   // Add to current connections
+  AcquireSRWLockExclusive(&conn->mutex);
   conn->numIncomingFDs += 1;
   if (conn->numIncomingFDs > conn->maxIncomingFDs) {
     conn->maxIncomingFDs *= 2;
     conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
   }
   conn->incomingFDs[conn->numIncomingFDs - 1] = newFD;
+  ReleaseSRWLockExclusive(&conn->mutex);
   ip->handle->fd = newFD;
   
   return ip;
