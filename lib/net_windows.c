@@ -6,7 +6,7 @@
 
 #include "net.h"
 
-#pragma comment(lib, "ws2_32.lib")
+// #pragma comment(lib, "ws2_32.lib")
 
 // TODO: move to net.h
 #define RECV_BUF_SIZE 64
@@ -78,7 +78,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips, co
 
   int rc = -1;
   for (int i = 0; i < len; i++) {
-    struct addrinfo *res = NULL, *ptr = NULL, hints = {0};
+    struct addrinfo *res = NULL, hints = {0};
 
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
@@ -125,7 +125,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips, co
       remote_ip ip = {0};
       ip.handle = calloc(1, sizeof(remote_ip_handle));
 
-      if (res->ai_family = AF_INET) {
+      if (res->ai_family == AF_INET) {
         ip.handle->protocolVer = IPV4;
         memcpy(&ip.handle->ipData.ipv4, (struct sockaddr_in *)res->ai_addr, sizeof(struct sockaddr_in));
         ip.addr = malloc(INET_ADDRSTRLEN + 1);
@@ -159,6 +159,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
       activeConnections[i].outgoingFDs = malloc(sizeof(int) * 10);
       activeConnections[i].maxIncomingFDs = 10;
       activeConnections[i].maxOutgoingFDs = 10;
+      activeConnections[i].protocolVerPlatSpecific = activeConnections[i].options.ver == IPV4 ? AF_INET : AF_INET6 ;
 
       /* initiate socket file descriptor */
       int iCandidate, iResult;
@@ -243,7 +244,6 @@ int destroy_tcp_connection(tcp_connection *conn) {
   free(conn->outgoingFDs);
   memset(conn, 0, sizeof(tcp_connection));
   conn->uid = -1;  // Mark this slot as free
-  nextUID--;
   return 0;
 }
 
@@ -251,7 +251,7 @@ int tcp_listen(tcp_connection *conn) {
   int listenReturn = listen(conn->listenSockFD, SOMAXCONN);
 
   if (listenReturn == SOCKET_ERROR) {
-    printf( "Listen failed with error: %d\n", WSAGetLastError() );
+    printf("Listen failed with error: %d\n", WSAGetLastError() );
     closesocket(conn->listenSockFD);
     WSACleanup();
     return 1;
@@ -307,10 +307,6 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
   return succeedAll;
 }
 
-// remote_ips *tcp_active_connections(tcp_connection *conn) {
-//   // TODO
-// }
-
 // TODO: conn is not use here?
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
@@ -362,40 +358,117 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, voi
   return recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
 }
 
-// udp_connection *create_udp_connection(conn_opt opt) {
-//   // TODO
-// }
+remote_ips tcp_active_connects(tcp_connection *conn) {
+  remote_ips ips;
+  ips.len = conn->numOutgoingFDs;
+  ips.ips = malloc(sizeof(remote_ip) * ips.len);
+  for (int i = 0; i < ips.len; i++) {
+    remote_ip ip;
+    ip.handle = malloc(sizeof(remote_ip_handle));
+    memset(ip.handle, 0, sizeof(remote_ip_handle));
+    ip.handle->protocolVer = conn->protocolVerPlatSpecific;
+    struct sockaddr addr = {0};
+    socklen_t addrlen = sizeof(addr);
+    getpeername(conn->outgoingFDs[i], &addr, &addrlen);
+    if (ip.handle->protocolVer == IPV4) {
+      ip.handle->ipData.ipv4 = *(struct sockaddr_in *)&addr;
+      ip.addr = malloc(INET_ADDRSTRLEN+1);
+      ip.port = malloc(6);
+      inet_ntop(AF_INET, &((struct sockaddr_in *)&ip.handle->ipData.ipv4)->sin_addr, ip.addr, INET_ADDRSTRLEN+1);
+      sprintf(ip.port, "%u", ip.handle->ipData.ipv4.sin_port);
+    } else {
+      ip.handle->ipData.ipv6 = *(struct sockaddr_in6 *)&addr;
+      ip.addr = malloc(INET6_ADDRSTRLEN+1);
+      ip.port = malloc(6);
+      inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip.handle->ipData.ipv6)->sin6_addr, ip.addr, INET6_ADDRSTRLEN+1);
+      sprintf(ip.port, "%u", ip.handle->ipData.ipv6.sin6_port);
+    }
+    ip.handle->fd = conn->outgoingFDs[i];
+    ips.ips[i] = ip;
+  }
+  return ips;
+}
 
-// int destroy_udp_connection() {
-//   // TODO
-// }
+remote_ips tcp_active_accepts(tcp_connection *conn) {
+  remote_ips ips;
+  ips.len = conn->numIncomingFDs;
+  ips.ips = malloc(sizeof(remote_ip) * ips.len);
+  for (int i = 0; i < ips.len; i++) {
+    remote_ip ip;
+    ip.handle = malloc(sizeof(remote_ip_handle));
+    memset(ip.handle, 0, sizeof(remote_ip_handle));
+    ip.handle->protocolVer = conn->protocolVerPlatSpecific;
+    struct sockaddr addr = {0};
+    socklen_t addrlen = sizeof(addr);
+    getpeername(conn->incomingFDs[i], &addr, &addrlen);
+    if (ip.handle->protocolVer == AF_INET) {
+      ip.handle->ipData.ipv4 = *(struct sockaddr_in *)&addr;
+      ip.addr = malloc(INET_ADDRSTRLEN+1);
+      ip.port = malloc(6);
+      inet_ntop(AF_INET, &((struct sockaddr_in *)&ip.handle->ipData.ipv4)->sin_addr, ip.addr, INET_ADDRSTRLEN+1);
+      sprintf(ip.port, "%u", ip.handle->ipData.ipv4.sin_port);
+    } else {
+      ip.handle->ipData.ipv6 = *(struct sockaddr_in6 *)&addr;
+      ip.addr = malloc(INET6_ADDRSTRLEN+1);
+      ip.port = malloc(6);
+      inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip.handle->ipData.ipv6)->sin6_addr, ip.addr, INET6_ADDRSTRLEN+1);
+      sprintf(ip.port, "%u", ip.handle->ipData.ipv6.sin6_port);
+    }
+    ip.handle->fd = conn->incomingFDs[i];
+    ips.ips[i] = ip;
+  }
+  return ips;
+}
 
-// remote_ips process_udp_sock_addresses(udp_connection *conn, char **ips, char **ports, int len) {
-//   // TODO
-// }
+remote_ip *accept_remote_connection(tcp_connection *conn) {
+  /* allocate memory for new ip*/
+  remote_ip *ip = malloc(sizeof(remote_ip));
+  ip->handle = malloc(sizeof(remote_ip_handle));
+  memset(ip->handle, 0, sizeof(remote_ip_handle));
+  ip->handle->protocolVer = conn->protocolVerPlatSpecific;
+  int newFD = -1;
 
-// int send_udp_message(udp_connection *conn, remote_ips remotes, void *data,
-//                      size_t len) {
-//   // TODO
-// }
+  if (ip->handle->protocolVer == AF_INET) {
+    socklen_t addrlen = sizeof(ip->handle->ipData.ipv4);
+    newFD = accept(conn->listenSockFD, (struct sockaddr *) &ip->handle->ipData.ipv4, &addrlen);
 
-// remote_ip *receive_udp_message_async(udp_connection *conn, void **data,
-//                                      size_t *len) {
-//   // TODO
-// }
+    if (newFD == INVALID_SOCKET) {
+        printf("accept failed: %d\n", WSAGetLastError());
+        closesocket(newFD);
+        return NULL;
+    }
 
-// remote_ip *receive_udp_message(udp_connection *conn, void **data, size_t *len) {
-//   // TODO
-// }
+    ip->addr = malloc(INET_ADDRSTRLEN + 1);
+    ip->port = malloc(6);
+    inet_ntop(AF_INET, &((struct sockaddr_in *) &ip->handle->ipData.ipv4)->sin_addr, ip->addr, INET_ADDRSTRLEN+1);
+    sprintf(ip->port, "%u", ip->handle->ipData.ipv4.sin_port);
+  } else {
+    socklen_t addrlen = sizeof(ip->handle->ipData.ipv6);
+    newFD = accept(conn->listenSockFD, (struct sockaddr *)&ip->handle->ipData.ipv6,
+                   &addrlen);
 
-// remote_ips tcp_active_connects(tcp_connection *conn) {
-//   // TODO
-// }
+    if (newFD == INVALID_SOCKET) {
+        printf("accept failed: %d\n", WSAGetLastError());
+        closesocket(newFD);
+        return NULL;
+    }
 
-// remote_ips tcp_active_accepts(tcp_connection *conn) {
-//   // TODO
-// }
-
-// remote_ip *accept_remote_connection(tcp_connection *conn) {
-//   // TODO
-// }
+    ip->addr = malloc(INET6_ADDRSTRLEN + 1);
+    ip->port = malloc(6);
+    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip->handle->ipData.ipv6)->sin6_addr, ip->addr, INET6_ADDRSTRLEN+1);
+    sprintf(ip->port, "%u", ip->handle->ipData.ipv6.sin6_port);
+  }
+  if (newFD == -1) {
+    return NULL;
+  }
+  // Add to current connections
+  conn->numIncomingFDs += 1;
+  if (conn->numIncomingFDs > conn->maxIncomingFDs) {
+    conn->maxIncomingFDs *= 2;
+    conn->incomingFDs = realloc(conn->incomingFDs, sizeof(int) * conn->maxIncomingFDs);
+  }
+  conn->incomingFDs[conn->numIncomingFDs - 1] = newFD;
+  ip->handle->fd = newFD;
+  
+  return ip;
+}
