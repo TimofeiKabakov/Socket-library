@@ -10,13 +10,19 @@
 
 typedef struct tcp_connection {
   int listenSockFD;
-  int *dataFDs;
-  size_t numDataFDs;
+  size_t numIncomingFDs;
+  size_t maxIncomingFDs;
+  int *incomingFDs;
+  int *outgoingFDs;
+  size_t numOutgoingFDs;
+  size_t maxOutgoingFDs;
   conn_opt options;
   int uid;
 } tcp_connection;
 
-WSADATA wsaData; // contains information about the Windows Sockets implementation
+/* contains information about the Windows Sockets implementation */
+WSADATA wsaData; 
+
 tcp_connection activeConnections[MAX_CONNECTION_OBJECTS];
 size_t connObjects = 0;
 int nextUID = 0;
@@ -26,6 +32,7 @@ typedef struct udp_connection {
 } udp_connection;
 
 typedef struct remote_ip {
+  int fd;
   int protocolVer;
   union {
     struct sockaddr_in ipv4;
@@ -44,7 +51,8 @@ void Initialize() {
   for (int i = 0; i < MAX_CONNECTION_OBJECTS; i++) {
     activeConnections[i].uid = -1;
     activeConnections[i].listenSockFD = -1;
-    activeConnections[i].numDataFDs = 0;
+    activeConnections[i].numIncomingFDs = 0;
+    activeConnections[i].numOutgoingFDs = 0;
   }
 }
 
@@ -113,6 +121,63 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
     if (activeConnections[i].uid == -1) {
       activeConnections[i].uid = nextUID++;
       activeConnections[i].options = opt;
+      if (opt.ver == DONT_CARE) {
+        activeConnections[i].options.ver = IPV4;
+      }
+      activeConnections[i].incomingFDs = malloc(sizeof(int) * 10);
+      activeConnections[i].outgoingFDs = malloc(sizeof(int) * 10);
+      activeConnections[i].maxIncomingFDs = 10;
+      activeConnections[i].maxOutgoingFDs = 10;
+
+      /* initiate socket file descriptor */
+      int iResult;
+      struct addrinfo *result = NULL, *ptr = NULL, hints;
+
+      ZeroMemory(&hints, sizeof(hints));
+      hints.ai_family = activeConnections[i].options.ver;
+      hints.ai_socktype = SOCK_STREAM;
+      hints.ai_protocol = IPPROTO_TCP;
+      hints.ai_flags = AI_PASSIVE;
+
+      /* get info for a particular port number provided in the opt parameter */
+      iResult = getaddrinfo(NULL, opt.port_num, &hints, &result);
+      if (iResult != 0) {
+          printf("getaddrinfo failed: %d\n", iResult);
+          WSACleanup();
+          return 1;
+      }
+
+      /* generate a local listening socket and bind it */
+      SOCKET ListenSocket = INVALID_SOCKET;
+
+      ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+
+      if (ListenSocket == INVALID_SOCKET) {
+        printf("Error at socket(): %ld\n", WSAGetLastError());
+        freeaddrinfo(result);
+        WSACleanup();
+        return 1;
+      }
+
+      /* bind the listening socket */
+      iResult = bind(ListenSocket, result->ai_addr, (int) result->ai_addrlen);
+
+      if (iResult == SOCKET_ERROR) {
+          printf("bind failed with error: %d\n", WSAGetLastError());
+          freeaddrinfo(result);
+          closesocket(ListenSocket);
+          WSACleanup();
+          return 1;
+      }
+
+      freeaddrinfo(result);
+
+      activeConnections[i].listenSockFD = ListenSocket;
+
+      if (activeConnections[i].listenSockFD == -1) {
+        printf("Error generating a socket for this connection\n");
+        return NULL;
+      }
       return &activeConnections[i];
     }
   }
@@ -120,14 +185,36 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
 }
 
 int destroy_tcp_connection(tcp_connection *conn) {
-  if (conn == NULL) return -1;
-  conn->uid = -1;
+    if (conn == NULL) {
+    return -1;
+  }
 
-  // TODO: close corresponding TCP connection and free allocated memory
+  for (int i = 0; i < conn->numIncomingFDs; i++) {
+    close(conn->incomingFDs[i]);
+  }
+  for (int i = 0; i < conn->numOutgoingFDs; i++) {
+    close(conn->outgoingFDs[i]);
+  }
+  close(conn->listenSockFD);
+
+  free(conn->incomingFDs);
+  free(conn->outgoingFDs);
+  memset(conn, 0, sizeof(tcp_connection));
+  conn->uid = -1;  // Mark this slot as free
+  return 0;
 }
 
 int tcp_listen(tcp_connection *conn) {
-  // TODO
+  int listenReturn = listen(conn->listenSockFD, SOMAXCONN);
+
+  if (listenReturn == SOCKET_ERROR) {
+    printf( "Listen failed with error: %ld\n", WSAGetLastError() );
+    closesocket(conn->listenSockFD);
+    WSACleanup();
+    return 1;
+  }
+
+  return listenReturn;
 }
 
 int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
