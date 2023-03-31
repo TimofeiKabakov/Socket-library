@@ -17,7 +17,7 @@
 
 tcp_connection *conn = NULL;
 remote_ips connectedClients;
-pthread_mutex_t mutex;
+pthread_rwlock_t mutex;
 
 // Represents a single record of requested work by a client.
 typedef struct work_record {
@@ -31,10 +31,10 @@ typedef struct work_record {
 void *accept_connections(void *args) {
   while (1) {
     accept_remote_connection(conn);
-    pthread_mutex_lock(&mutex);
+    pthread_rwlock_wrlock(&mutex);
     free_sock_addresses(connectedClients);
     connectedClients = tcp_active_accepts(conn);
-    pthread_mutex_unlock(&mutex);
+    pthread_rwlock_unlock(&mutex);
   }
   return NULL;
 }
@@ -60,7 +60,7 @@ void *doWork(void *args) {
   char resultMsg[MAX_CLIENT_MSG_SIZE];
   sprintf(resultMsg, "%d", result);
 
-  pthread_mutex_lock(&mutex);
+  pthread_rwlock_rdlock(&mutex);
   // We need to find the client that requested this work
   // If its no longer connected to the server, the work just gets dropped. 
   for (int i = 0; i < connectedClients.len; i++) {
@@ -75,7 +75,7 @@ void *doWork(void *args) {
             break;
           }
   }
-  pthread_mutex_unlock(&mutex);
+  pthread_rwlock_unlock(&mutex);
 
   // Cleanup, this request is done.
   free(record->addr);
@@ -91,7 +91,7 @@ int main(int argc, const char **argv) {
     printf("Error: You must specify exactly one argument - the port for this server to listen on.\n");
     exit(-1);
   }
-  pthread_mutex_init(&mutex, NULL);
+  pthread_rwlock_init(&mutex, NULL);
 
   // Initialize the library
   Initialize();
@@ -118,7 +118,7 @@ int main(int argc, const char **argv) {
       // Loop through every currently connected client 
       // Inefficient locking since this is just an api example - a real world application would want 
       // to perform something more efficient.
-      pthread_mutex_lock(&mutex);
+      pthread_rwlock_rdlock(&mutex);
       for (int i = 0; i < connectedClients.len; i++) {
         void *buf = NULL;
         size_t len = 0;
@@ -136,6 +136,6 @@ int main(int argc, const char **argv) {
           pthread_create(&workThread, NULL, doWork, record);
         }
       }
-      pthread_mutex_unlock(&mutex);
+      pthread_rwlock_unlock(&mutex);
   }
 }
