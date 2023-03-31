@@ -139,9 +139,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
       char portNumStr[6];
       sprintf(portNumStr, "%d", opt.port_num);
 
-      /* can opt.port_num be 0??? */
-
-       /* get info for a particular port number provided in the opt parameter */
+      /* get info for a particular port number provided in the opt parameter */
       iResult = getaddrinfo(NULL, portNumStr, &hints, &result);
       if (iResult != 0) {
           printf("getaddrinfo failed: %d\n", iResult);
@@ -186,7 +184,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
         printf("Error generating a socket for this connection\n");
         return NULL;
       }
-      
+
       return &activeConnections[i];
     }
   }
@@ -254,12 +252,14 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
+    /* IS IT RIGHT HERE????? */
+
     /* get info for a particular port number provided in the opt parameter */
-    iResult = getaddrinfo(sockaddr_to_connect, "0", &hints, &result);
+    iResult = getaddrinfo(remotes.ips[i].addr, remotes.ips[i].port, &hints, &result);
     if (iResult != 0) {
         printf("getaddrinfo failed: %d\n", iResult);
         WSACleanup();
-        return NULL;
+        return 0;
     }
 
     SOCKET ConnectSocket = INVALID_SOCKET;
