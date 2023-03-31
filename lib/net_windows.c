@@ -8,6 +8,10 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
+// TODO: move to net.h
+#define RECV_BUF_SIZE 64
+#define PORT_STRLEN 6
+
 typedef struct tcp_connection {
   int listenSockFD;
   int *incomingFDs;
@@ -27,6 +31,18 @@ WSADATA wsaData;
 tcp_connection activeConnections[MAX_CONNECTION_OBJECTS];
 size_t connObjects = 0;
 int nextUID = 0;
+
+typedef struct udp_connection {
+  // TODO
+} udp_connection;
+
+// typedef struct remote_ip {
+//   int protocolVer;
+//   union {
+//     struct sockaddr_in ipv4;
+//     struct sockaddr_in6 ipv6;
+//   } ipData;
+// } remote_ip;
 
 typedef struct remote_ip_handle {
   int protocolVer;
@@ -62,12 +78,10 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips, co
 
   int rc = -1;
   for (int i = 0; i < len; i++) {
-    struct addrinfo *res = NULL, hints;
+    struct addrinfo *res = NULL, *ptr = NULL, hints = {0};
 
-    // TODO: ZeroMemory() wraps memset(), need to figure out which one is better
-    // microsoft documentation uses ZeroMemory()
-    ZeroMemory(&hints, sizeof hints);
-    
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
     switch (conn->options.ver) {
     case IPV4:
       hints.ai_family = AF_INET;
@@ -80,32 +94,53 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips, co
       break;
     }
 
-    // tell getaddrinfo() what it should look for
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
+    // if ((rc = getaddrinfo(ips[i], ports[i], &hints, &res)) == 0) {
+    //   struct addrinfo *candidate = NULL;
+    //   for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
+    //     remote_ip ip = {0};
+    //     ip.handle = calloc(1, sizeof(remote_ip_handle));
 
-    if ((rc = getaddrinfo(ips[i], ports[i], &hints, &res)) == 0) {
-      struct addrinfo *candidate = NULL;
-      // TODO: research on whether this loop is neccessary, because now it's 
-      // logically inexistent, maybe we can use it to check other stuff, maybe 
-      // we need to remove it
-      for (candidate = res; candidate != NULL; candidate = candidate->ai_next) {
-        remote_ip ip = {0};
+    //     if (candidate->ai_family == AF_INET) {
+    //       ip.handle->protocolVer = IPV4;
+    //       memcpy(&ip.handle->ipData.ipv4, (struct sockaddr_in *)candidate->ai_addr, sizeof(struct sockaddr_in));
+    //       ip.addr = malloc(INET_ADDRSTRLEN + 1);
+    //     } else {
+    //       ip.handle->protocolVer = IPV6;
+    //       memcpy(&ip.handle->ipData.ipv6, (struct sockaddr_in6 *)candidate->ai_addr, sizeof(struct sockaddr_in6));
+    //       ip.addr = malloc(INET6_ADDRSTRLEN + 1);
+    //     }
 
-        // if (candidate->ai_family == AF_INET) {
-        //   ip.protocolVer = AF_INET;
-        //   memcpy(&ip.ipData.ipv4, (struct sockaddr_in*)candidate->ai_addr, sizeof(struct sockaddr_in));
-        // } else {
-        //   ip.protocolVer = AF_INET6;
-        //   memcpy(&ip.ipData.ipv6, (struct sockaddr_in6*)candidate->ai_addr, sizeof(struct sockaddr_in6));
-        // }
+    //     ip.port = malloc(PORT_STRLEN);
+    //     strcpy(ip.port, ports[i]);
+    //     ipList.ips[ipList.len] = ip;
+    //     ipList.len++;
+    //     break;
+    //   }
+    //   freeaddrinfo(res);
+    //   WSACleanup();
+    // }
 
-        ipList.ips[ipList.len] = ip;
-        ipList.len++;
-        break;
+    rc = getaddrinfo(ips[i], ports[i], &hints, &res);
+    if (rc == 0) {
+      remote_ip ip = {0};
+      ip.handle = calloc(1, sizeof(remote_ip_handle));
+
+      if (res->ai_family = AF_INET) {
+        ip.handle->protocolVer = IPV4;
+        memcpy(&ip.handle->ipData.ipv4, (struct sockaddr_in *)res->ai_addr, sizeof(struct sockaddr_in));
+        ip.addr = malloc(INET_ADDRSTRLEN + 1);
+      } else {
+        ip.handle->protocolVer = IPV6;
+        memcpy(&ip.handle->ipData.ipv6, (struct sockaddr_in6 *)res->ai_addr, sizeof(struct sockaddr_in6));
+        ip.addr = malloc(INET6_ADDRSTRLEN + 1);
       }
+
+      ip.port = malloc(PORT_STRLEN);
+      strcpy(ip.port, ports[i]);
+      ipList.ips[ipList.len] = ip;
+      ipList.len++;
+
       freeaddrinfo(res);
-      // TODO: should WSAClenup() be put here?
       WSACleanup();
     }
   }
@@ -276,18 +311,56 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
 //   // TODO
 // }
 
-// int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
-//                      size_t len) {
-//   // TODO
-// }
+// TODO: conn is not use here?
+int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
+                     size_t len) {
+  // TODO: test needed
+  int rc, nSent = 0;
+  for (int i = 0; i < remotes.len; i++)
+  {
+    rc = send(remotes.ips[i].handle->fd, data, len, 0);
+    if (rc > 0) {
+      nSent++;
+    }
+  }
+  return nSent;
+}
 
-// int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
-//   // TODO
-// }
+int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
+  // TODO: test needed; is user expected to free *data on failure?
+  *data = malloc(RECV_BUF_SIZE);
+  if (senderIdx > ips.len -1) {
+    return -1;
+  }
 
-// int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
-//   // TODO
-// }
+  remote_ip *sender = &ips.ips[senderIdx];
+
+  struct timeval timeval = {0};
+  timeval.tv_sec = 0;
+  timeval.tv_usec = conn->options.timeout;
+  fd_set singleset;
+
+  FD_ZERO(&singleset);
+  FD_SET(sender->handle->fd, &singleset);
+
+  int res = select(sender->handle->fd + 1, &singleset, NULL, NULL, &timeval);
+  if (res > 0 && FD_ISSET(sender->handle->fd, &singleset)) {
+    return recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
+  } else {
+    return 0;
+  }
+}
+
+int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
+  // TODO: test needed
+  *data = malloc(RECV_BUF_SIZE);
+  if (senderIdx > ips.len - 1) {
+    return -1;
+  }
+
+  remote_ip *sender = &ips.ips[senderIdx];
+  return recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
+}
 
 // udp_connection *create_udp_connection(conn_opt opt) {
 //   // TODO

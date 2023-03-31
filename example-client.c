@@ -30,7 +30,7 @@ int main(int argc, const char **argv) {
   Initialize();
   conn_opt opt = {0};
   opt.ver = IPV4;
-  struct tcp_connection *conn = create_tcp_connection(opt);
+  tcp_connection *conn = create_tcp_connection(opt);
   if (conn == NULL) {
     printf("Failed to allocate new tcp_connection object!\n");
     exit(-1);
@@ -52,26 +52,26 @@ int main(int argc, const char **argv) {
     exit(-1);
   }
 
-  // while (1) {
-  //   // Send a request. We choose a random value to perform the computation on.
-  //   // The server simply computes the request value multiplied by 3, as a placeholder 
-  //   // for some real, genuinely expensive computation.
-  //   // We pick a random value between 0 and 4000 to send to the server, translate it into ASCII, 
-  //   // and deliver that payload. 
-  //   int reqVal = rand() % 4000;
-  //   char sendMsg[MAX_CLIENT_MSG_SIZE];
-  //   sprintf(sendMsg, "%d", reqVal);
-  //   send_tcp_message(conn, active, sendMsg, strlen(sendMsg));
-  //   printf("Sent work request with request value: %d\n", reqVal);
+  while (1) {
+    // Send a request. We choose a random value to perform the computation on.
+    // The server simply computes the request value multiplied by 3, as a placeholder 
+    // for some real, genuinely expensive computation.
+    // We pick a random value between 0 and 4000 to send to the server, translate it into ASCII, 
+    // and deliver that payload. 
+    int reqVal = rand() % 4000;
+    char sendMsg[MAX_CLIENT_MSG_SIZE];
+    sprintf(sendMsg, "%d", reqVal);
+    send_tcp_message(conn, active, sendMsg, strlen(sendMsg));
+    printf("Sent work request with request value: %d\n", reqVal);
 
-  //   // Now the client just has to sit back and wait for a response. In a real-world use case, 
-  //   // you would preferably want to perform some client-side work here instead of just stalling while waiting for
-  //   // the response. 
-  //   void *data = NULL;
-  //   size_t len = 0;
-  //   receive_tcp_message(conn, active, 0, &data, &len);
-  //   printf("Received result: %ld\n", strtol((char*)data, NULL, 10));
-  // }
+    // Now the client just has to sit back and wait for a response. In a real-world use case, 
+    // you would preferably want to perform some client-side work here instead of just stalling while waiting for
+    // the response. 
+    void *data = NULL;
+    size_t len = 0;
+    receive_tcp_message(conn, active, 0, &data, &len);
+    printf("Received result: %ld\n", strtol((char*)data, NULL, 10));
+  }
 }
 
 
