@@ -9,8 +9,8 @@ struct tcp_connection;
 typedef struct tcp_connection tcp_connection;
 struct udp_connection;
 typedef struct udp_connection udp_connection;
-struct remote_ip;
-typedef struct remote_ip remote_ip;
+struct remote_ip_handle;
+typedef struct remote_ip_handle remote_ip_handle;
 
 /** Shared types. These are common across all implementations */
 enum IPVersion { IPV4, IPV6, DONT_CARE };
@@ -19,6 +19,11 @@ typedef struct conn_opt {
   size_t timeout;
   uint16_t port_num;
 } conn_opt;
+typedef struct remote_ip {
+  char *addr;
+  char *port;
+  remote_ip_handle *handle;
+} remote_ip;
 typedef struct remote_ips {
   remote_ip *ips;
   size_t len;
@@ -74,7 +79,7 @@ void free_sock_addresses(remote_ips ips);
  * @param len The number of elements in the ips array and the ports array. 
  * @return A struct representing an array of remote_ip structs.
  */
-remote_ips process_tcp_sock_addresses(tcp_connection *conn, char **ips, char **ports, int len);
+remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips, const char **ports, int len);
 /**
  * @brief Creates a new tcp connection
  *
@@ -171,7 +176,7 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, voi
  * @param senderIdx The index of ips containing the desired sender
  * @param data A pointer to a pointer that will hold the received message
  * @param len The length of the received message, in bytes
- * @return 0 on success, or a nonzero value if an error occured.
+ * @return The number of bytes read on success, 0 if no new data to read or if error occured.
  */
 int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len);
 
