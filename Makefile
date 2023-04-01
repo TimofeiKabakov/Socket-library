@@ -1,51 +1,64 @@
-.PHONY: all
+CC = gcc
+CFLAGS = -g
+CPPFLAGS = -std=gnu99 -Wall -pedantic -Wextra
 
-CFLAGS = -Wall -g
+OS = $(shell uname -o)
 
-objLin = obj/linux/
-
-objWin = obj/windows/
-
-UNAME := $(shell uname)
-
-ifeq ($(UNAME), Linux)
-all: libSockLin.a example-clientLin example-serverLin
-else
-all: libSockWin.a example-clientWin example-serverWin
+ifeq ($(OS), Msys) # the example server program is not compatible with Windows since it uses pthread.h
+	VERSION = windows
+	target = example-client-$(VERSION)
+endif
+ifeq ($(OS), GNU/Linux)
+	VERSION = linux
+	target = example-server-$(VERSION) example-client-$(VERSION)
 endif
 
-libSockWin.a: net_windows.o
-	ar -r -s -c libSockWin.a net_windows.o
+all: ./build/bin $(target)
 
-libSockLin.a: net_linux.o
-	ar -r -s -c libSockLin.a net_linux.o
+#--- build dirs ---------------------------------------------------------------
 
-net_windows.o: lib/net_windows.c lib/net.h
-	gcc -o net_windows.o -c $(CFLAGS) lib/net_windows.c
-	
-net_linux.o: lib/net_linux.c lib/net.h
-	gcc -o net_linux.o -c $(CFLAGS) lib/net_linux.c
+./build/bin:
+	mkdir -p ./build/obj/$(VERSION)
+	mkdir -p ./build/lib/$(VERSION)
+	mkdir -p ./build/bin/$(VERSION)
 
-example-clientWin: example-client.o libSockWin.a lib/net.h
-	gcc $(CFLAGS) -o example-client example-client.o libSockWin.a -lws2_32
+#--- libNet -------------------------------------------------------------------
 
-example-clientLin: example-client.o libSockLin.a lib/net.h
-	gcc $(CFLAGS) -o example-client example-client.o libSockLin.a
+./build/lib/$(VERSION)/libNet.a: ./build/obj/$(VERSION)/net.o
+	ar -r ./build/lib/$(VERSION)/libNet.a ./build/obj/$(VERSION)/net.o
 
-example-client.o: example-client.c
-	gcc $(CFLAGS) -c -o example-client.o example-client.c
+./build/obj/$(VERSION)/net.o: ./lib/net_$(VERSION).c ./lib/net.h
+	$(CC) -o ./build/obj/$(VERSION)/net.o -c $(CFLAGS) $(CPPFLAGS) ./lib/net_$(VERSION).c
 
-example-serverWin: example-server.o libSockWin.a lib/net.h
-	gcc $(CFLAGS) -o example-server example-server.o libSockWin.a -lws2_32
+#--- example server -----------------------------------------------------------
 
-example-serverLin: example-server.o libSockLin.a lib/net.h
-	gcc $(CFLAGS) -o example-server example-server.o libSockLin.a
+example-server-$(VERSION): ./build/bin/$(VERSION)/example-server
+	ln -sf ./build/bin/$(VERSION)/example-server example-server-$(VERSION)
 
-example-server.o: example-server.c
-	gcc $(CFLAGS) -c -o example-server.o example-server.c
+./build/bin/$(VERSION)/example-server: ./build/obj/$(VERSION)/example-server.o ./build/lib/$(VERSION)/libNet.a
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o ./build/bin/$(VERSION)/example-server ./build/obj/$(VERSION)/example-server.o -L./build/lib/$(VERSION) -lNet
+
+./build/obj/$(VERSION)/example-server.o: example-server.c ./lib/net.h
+	$(CC) -o ./build/obj/$(VERSION)/example-server.o -c $(CFLAGS) $(CPPFLAGS) example-server.c -I./lib
+
+#--- example client -----------------------------------------------------------
+
+example-client-$(VERSION): ./build/bin/$(VERSION)/example-client
+	ln -sf ./build/bin/$(VERSION)/example-client example-client-$(VERSION)
+
+./build/bin/$(VERSION)/example-client: ./build/obj/$(VERSION)/example-client.o ./build/lib/$(VERSION)/libNet.a
+ifeq ($(VERSION), windows)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o ./build/bin/$(VERSION)/example-client ./build/obj/$(VERSION)/example-client.o -L./build/lib/$(VERSION) -lNet -lws2_32
+else
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o ./build/bin/$(VERSION)/example-client ./build/obj/$(VERSION)/example-client.o -L./build/lib/$(VERSION) -lNet
+endif
+
+./build/obj/$(VERSION)/example-client.o: example-client.c ./lib/net.h
+	$(CC) -o ./build/obj/$(VERSION)/example-client.o -c $(CFLAGS) $(CPPFLAGS) example-client.c -I./lib
+
+#--- clean --------------------------------------------------------------------
 
 clean:
-	rm -f *.o
-	rm -f *.a
-	rm example-client
-	rm example-server
+	rm -rf ./build
+	rm -f example-server-$(VERSION)
+	rm -f example-client-$(VERSION)

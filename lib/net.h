@@ -30,6 +30,8 @@ typedef struct remote_ips {
 } remote_ips;
 
 #define MAX_CONNECTION_OBJECTS 10
+#define PORT_STRLEN 6
+#define RECV_BUFLEN 64
 
 // TODO: Define error codes.
 

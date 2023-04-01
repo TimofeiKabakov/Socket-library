@@ -4,7 +4,7 @@
 // The idea is that this simple example models a real-world use case where clients need
 // to offload some very expensive computation onto a much more powerful server. 
 
-#include "lib/net.h"
+#include "net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

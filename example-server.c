@@ -5,7 +5,7 @@
 // that it can continue listening for new client requests immediately, instead of having them fill up in a queue 
 // at the transport layer. 
 
-#include "lib/net.h"
+#include "net.h"
 #include <stdio.h>
 #include <pthread.h>
 #include <stdlib.h>
