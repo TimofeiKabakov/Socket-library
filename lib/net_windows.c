@@ -6,8 +6,6 @@
 
 #include "net.h"
 
-/* #pragma comment(lib, "ws2_32.lib") */
-
 typedef struct tcp_connection {
   int listenSockFD;
 
@@ -71,9 +69,7 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips, co
     case IPV6:
       hints.ai_family = AF_INET6;
     case DONT_CARE:
-    default:
       hints.ai_family = AF_UNSPEC;
-      break;
     }
 
     rc = getaddrinfo(ips[i], ports[i], &hints, &res);
@@ -129,7 +125,7 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
       hints.ai_flags = AI_PASSIVE;
      
       /* convert provided port num to string for further method calls */
-      char portNumStr[6];
+      char portNumStr[PORT_STRLEN];
       sprintf(portNumStr, "%d", opt.port_num);
 
       /* get info for a particular port number provided in the opt parameter */
@@ -397,7 +393,7 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
     if (ip.handle->protocolVer == IPV4) {
       ip.handle->ipData.ipv4 = *(struct sockaddr_in *)&addr;
       ip.addr = malloc(INET_ADDRSTRLEN+1);
-      ip.port = malloc(6);
+      ip.port = malloc(PORT_STRLEN);
       inet_ntop(AF_INET, &((struct sockaddr_in *)&ip.handle->ipData.ipv4)->sin_addr, ip.addr, INET_ADDRSTRLEN+1);
       sprintf(ip.port, "%u", ip.handle->ipData.ipv4.sin_port);
     } else {
@@ -428,13 +424,13 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
     if (ip.handle->protocolVer == AF_INET) {
       ip.handle->ipData.ipv4 = *(struct sockaddr_in *)&addr;
       ip.addr = malloc(INET_ADDRSTRLEN+1);
-      ip.port = malloc(6);
+      ip.port = malloc(PORT_STRLEN);
       inet_ntop(AF_INET, &((struct sockaddr_in *)&ip.handle->ipData.ipv4)->sin_addr, ip.addr, INET_ADDRSTRLEN+1);
       sprintf(ip.port, "%u", ip.handle->ipData.ipv4.sin_port);
     } else {
       ip.handle->ipData.ipv6 = *(struct sockaddr_in6 *)&addr;
       ip.addr = malloc(INET6_ADDRSTRLEN+1);
-      ip.port = malloc(6);
+      ip.port = malloc(PORT_STRLEN);
       inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip.handle->ipData.ipv6)->sin6_addr, ip.addr, INET6_ADDRSTRLEN+1);
       sprintf(ip.port, "%u", ip.handle->ipData.ipv6.sin6_port);
     }
@@ -477,7 +473,7 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
     }
 
     ip->addr = malloc(INET6_ADDRSTRLEN + 1);
-    ip->port = malloc(6);
+    ip->port = malloc(PORT_STRLEN);
     inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip->handle->ipData.ipv6)->sin6_addr, ip->addr, INET6_ADDRSTRLEN+1);
     sprintf(ip->port, "%u", ip->handle->ipData.ipv6.sin6_port);
   }
