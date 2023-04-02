@@ -1,17 +1,28 @@
-// This is a simple example of utilizing the library to implement a simple server. 
-// The server produces a dedicated thread where it simply listens for incoming connections from clients
-// On the main thread, it patiently waits for requests from clients who would like the server to perform some work. 
-// When it receives a request to perform work, it spins up a child thread to perform the costly computation, to ensure
-// that it can continue listening for new client requests immediately, instead of having them fill up in a queue 
-// at the transport layer. 
+/*
+ * CMPT 434 Project
+ *
+ * Matthew Munro, mam552, 11291769
+ * Xianglong Du, xid379, 11255352
+ * Timofei Kabakov, tik981, 11305645
+ */
 
-#include "net.h"
-#include <stdio.h>
+// This is a simple example of utilizing the library to implement a simple
+// server. The server produces a dedicated thread where it simply listens for
+// incoming connections from clients On the main thread, it patiently waits for
+// requests from clients who would like the server to perform some work. When it
+// receives a request to perform work, it spins up a child thread to perform the
+// costly computation, to ensure that it can continue listening for new client
+// requests immediately, instead of having them fill up in a queue at the
+// transport layer.
+
+#include <math.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <unistd.h>
+
+#include "net.h"
 
 #define MAX_CLIENT_MSG_SIZE 10
 
@@ -26,8 +37,8 @@ typedef struct work_record {
   char *inputData;
 } work_record;
 
-// This thread entry point simply runs in a loop forever, waiting for 
-// new clients to connect to it. 
+// This thread entry point simply runs in a loop forever, waiting for
+// new clients to connect to it.
 void *accept_connections() {
   while (1) {
     accept_remote_connection(conn);
@@ -40,21 +51,23 @@ void *accept_connections() {
 }
 
 // This function executes when the server receives a new work request
-// In a real-world application, this function would perform some intensive computation that can't 
-// be done either on the server main thread or on the client. 
-// We fake this expensive computation by sleeping a random period between 3 and 9 seconds
-// In reality, it simply multiplies the given input value by 3.
+// In a real-world application, this function would perform some intensive
+// computation that can't be done either on the server main thread or on the
+// client. We fake this expensive computation by sleeping a random period
+// between 3 and 9 seconds In reality, it simply multiplies the given input
+// value by 3.
 void *doWork(void *args) {
   // Fake some work being done...very complicated calculation!
   // Range between 3 and 9 seconds
   int sleepTime = 0;
-  while ((sleepTime = rand() % 10) < 3) { }
+  while ((sleepTime = rand() % 10) < 3) {
+  }
   sleep(sleepTime);
 
   // Get the client request
-  work_record *record = (work_record*)args;
+  work_record *record = (work_record *)args;
   long inputData = strtol(record->inputData, NULL, 10);
-  int result = inputData*3;
+  int result = inputData * 3;
 
   // Prepare message for transmission
   char resultMsg[MAX_CLIENT_MSG_SIZE];
@@ -62,18 +75,18 @@ void *doWork(void *args) {
 
   pthread_rwlock_rdlock(&mutex);
   // We need to find the client that requested this work
-  // If its no longer connected to the server, the work just gets dropped. 
+  // If its no longer connected to the server, the work just gets dropped.
   for (size_t i = 0; i < connectedClients.len; i++) {
-      if (strcmp(record->addr, connectedClients.ips[i].addr) == 0 &&
-          strcmp(record->port, connectedClients.ips[i].port) == 0) {
-            // Found the client we need to respond to
-            remote_ips sendTo;
-            sendTo.len = 1;
-            sendTo.ips = malloc(sizeof(remote_ip));
-            memcpy(&sendTo.ips[0], &connectedClients.ips[i], sizeof(remote_ip));
-            send_tcp_message(conn, sendTo, resultMsg, strlen(resultMsg));
-            break;
-          }
+    if (strcmp(record->addr, connectedClients.ips[i].addr) == 0 &&
+        strcmp(record->port, connectedClients.ips[i].port) == 0) {
+      // Found the client we need to respond to
+      remote_ips sendTo;
+      sendTo.len = 1;
+      sendTo.ips = malloc(sizeof(remote_ip));
+      memcpy(&sendTo.ips[0], &connectedClients.ips[i], sizeof(remote_ip));
+      send_tcp_message(conn, sendTo, resultMsg, strlen(resultMsg));
+      break;
+    }
   }
   pthread_rwlock_unlock(&mutex);
 
@@ -85,10 +98,11 @@ void *doWork(void *args) {
   return NULL;
 }
 
-
 int main(int argc, const char **argv) {
   if (argc != 2) {
-    printf("Error: You must specify exactly one argument - the port for this server to listen on.\n");
+    printf(
+        "Error: You must specify exactly one argument - the port for this "
+        "server to listen on.\n");
     exit(-1);
   }
   pthread_rwlock_init(&mutex, NULL);
@@ -109,33 +123,32 @@ int main(int argc, const char **argv) {
   }
 
   // Have a seperate thread listen exclusively for accepted connections.
-  pthread_t acceptConnThread;  
+  pthread_t acceptConnThread;
   pthread_create(&acceptConnThread, NULL, accept_connections, NULL);
 
   // Our main loop, which receives messages from the clients and processes them
   // in a non-blocking manner
   while (1) {
-      // Loop through every currently connected client 
-      // Inefficient locking since this is just an api example - a real world application would want 
-      // to perform something more efficient.
-      pthread_rwlock_rdlock(&mutex);
-      for (size_t i = 0; i < connectedClients.len; i++) {
-        void *buf = NULL;
-        //size_t len = 0;
-        int res = receive_tcp_message_async(conn, connectedClients, i, &buf);
-        if (res > 0) {
-          // Received some data, farm it off to a child thread
-          pthread_t workThread;
-          // All this allocated memory will be freed by the child thread
-          work_record *record = malloc(sizeof(work_record));
-          record->addr = malloc(strlen(connectedClients.ips[i].addr)+1);
-          record->port = malloc(strlen(connectedClients.ips[i].port)+1);
-          strcpy(record->addr, connectedClients.ips[i].addr);
-          strcpy(record->port, connectedClients.ips[i].port);
-          record->inputData = buf;
-          pthread_create(&workThread, NULL, doWork, record);
-        }
+    // Loop through every currently connected client
+    // Inefficient locking since this is just an api example - a real world
+    // application would want to perform something more efficient.
+    pthread_rwlock_rdlock(&mutex);
+    for (size_t i = 0; i < connectedClients.len; i++) {
+      void *buf = NULL;
+      int res = receive_tcp_message_async(conn, connectedClients, i, &buf);
+      if (res > 0) {
+        // Received some data, farm it off to a child thread
+        pthread_t workThread;
+        // All this allocated memory will be freed by the child thread
+        work_record *record = malloc(sizeof(work_record));
+        record->addr = malloc(strlen(connectedClients.ips[i].addr) + 1);
+        record->port = malloc(strlen(connectedClients.ips[i].port) + 1);
+        strcpy(record->addr, connectedClients.ips[i].addr);
+        strcpy(record->port, connectedClients.ips[i].port);
+        record->inputData = buf;
+        pthread_create(&workThread, NULL, doWork, record);
       }
-      pthread_rwlock_unlock(&mutex);
+    }
+    pthread_rwlock_unlock(&mutex);
   }
 }

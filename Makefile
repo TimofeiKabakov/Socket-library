@@ -1,3 +1,9 @@
+# CMPT 434 Project
+#
+# Matthew Munro, mam552, 11291769
+# Xianglong Du, xid379, 11255352
+# Timofei Kabakov, tik981, 11305645
+
 CC = gcc
 CFLAGS = -g
 CPPFLAGS = -std=gnu99 -Wall -pedantic -Wextra

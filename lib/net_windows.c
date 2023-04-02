@@ -1,3 +1,11 @@
+/*
+ * CMPT 434 Project
+ *
+ * Matthew Munro, mam552, 11291769
+ * Xianglong Du, xid379, 11255352
+ * Timofei Kabakov, tik981, 11305645
+ */
+
 #include <stdlib.h>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
@@ -278,7 +286,6 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
       AcquireSRWLockExclusive(&conn->mutex);
       for (size_t j = 0; j < conn->numOutgoingFDs; j++) {
         if (conn->outgoingFDs[j] == disconnectedFD) {
-          /* TODO: why -1 not +1 */
           conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
           conn->numOutgoingFDs--;
         }
