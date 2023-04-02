@@ -29,6 +29,7 @@ int main(int argc, const char **argv) {
   // Initialize the library
   Initialize();
   conn_opt opt = {0};
+  opt.timeout = 10000000;
   opt.ver = IPV4;
   tcp_connection *conn = create_tcp_connection(opt);
   if (conn == NULL) {
@@ -69,7 +70,8 @@ int main(int argc, const char **argv) {
     // the response. 
     void *data = NULL;
     size_t len = 0;
-    receive_tcp_message(conn, active, 0, &data, &len);
+    // receive_tcp_message(conn, active, 0, &data, &len);
+    receive_tcp_message_async(conn, active, 0, &data, &len);
     printf("Received result: %ld\n", strtol((char*)data, NULL, 10));
   }
 }

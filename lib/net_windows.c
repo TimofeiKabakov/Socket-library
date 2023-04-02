@@ -263,10 +263,8 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
   return succeedAll;
 }
 
-// TODO: conn is not use here?
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
-  // TODO: test needed
   int nBytesSent, nSent = 0;
   for (int i = 0; i < remotes.len; i++) {
     nBytesSent = send(remotes.ips[i].handle->fd, data, len, 0);
@@ -302,7 +300,6 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
 }
 
 int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
-  // TODO: test needed; is user expected to free *data on failure?
   *data = malloc(RECV_BUFLEN);
   if (senderIdx > ips.len -1) {
     return -1;
@@ -322,8 +319,8 @@ int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderId
   if (res > 0 && FD_ISSET(sender->handle->fd, &singleset)) {
     nBytesRecved = recv(sender->handle->fd, *data, RECV_BUFLEN, 0);
     
-    /* TODO: 0 or SOCKET_ERROR */
-    if (nBytesRecved == 0) {
+    /* 0 or SOCKET_ERROR */
+    if (nBytesRecved <= 0) {
       AcquireSRWLockExclusive(&conn->mutex);
       for (int j = 0; j < conn->numOutgoingFDs; j++) {
         if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
@@ -348,34 +345,61 @@ int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderId
 }
 
 int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len) {
-  // TODO: test needed
   *data = malloc(RECV_BUFLEN);
-  if (senderIdx > ips.len - 1) {
+  if (senderIdx > ips.len -1) {
     return -1;
   }
 
   remote_ip *sender = &ips.ips[senderIdx];
 
-  int nBytesRecved = recv(sender->handle->fd, *data, RECV_BUFLEN, 0);
-  if (nBytesRecved == 0) {
-    AcquireSRWLockExclusive(&conn->mutex);
-    for (int j = 0; j < conn->numOutgoingFDs; j++) {
-      if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
-        conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
-        conn->numOutgoingFDs--;
-      }
-    }
+  // TIMEVAL timeval = {0};
+  // timeval.tv_sec = 0;
+  // timeval.tv_usec = conn->options.timeout;
+  // fd_set singleset;
 
-    for (int j = 0; j < conn->numIncomingFDs; j++) {
-      if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
-        conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
-        conn->numIncomingFDs--;
-      }
-    }
+  // FD_ZERO(&singleset);
+  // FD_SET(sender->handle->fd, &singleset);
 
-    ReleaseSRWLockExclusive(&conn->mutex);
-  }
-  return nBytesRecved;
+  // int nBytesRecved, res;
+  // do
+  // {
+  //   res = select(sender->handle->fd + 1, &singleset, NULL, NULL, &timeval);
+  // } while (res <= 0);
+  
+  // if (res > 0 && FD_ISSET(sender->handle->fd, &singleset)) {
+  //   nBytesRecved = recv(sender->handle->fd, *data, RECV_BUFLEN, 0);
+    
+  //   /* TODO: 0 or SOCKET_ERROR */
+  //   if (nBytesRecved <= 0) {
+  //     AcquireSRWLockExclusive(&conn->mutex);
+  //     for (int j = 0; j < conn->numOutgoingFDs; j++) {
+  //       if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
+  //         conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
+  //         conn->numOutgoingFDs--;
+  //       }
+  //     }
+
+  //     for (int j = 0; j < conn->numIncomingFDs; j++) {
+  //       if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
+  //         conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
+  //         conn->numIncomingFDs--;
+  //       }
+  //     }
+
+  //     ReleaseSRWLockExclusive(&conn->mutex);
+  //   }
+  //   return nBytesRecved;
+  // } else {
+  //   return 0;
+  // }
+
+  int nBytesReceived;
+  do
+  {
+    nBytesReceived = receive_tcp_message_async(conn, ips, senderIdx, data, len);
+  } while (nBytesReceived <= 0);
+  
+  return nBytesReceived;
 }
 
 remote_ips tcp_active_connects(tcp_connection *conn) {
