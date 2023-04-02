@@ -1,20 +1,24 @@
+/*
+ * CMPT 434 Project
+ *
+ * Matthew Munro, mam552, 11291769
+ * Xianglong Du, xid379, 11255352
+ * Timofei Kabakov, tik981, 11305645
+ */
+
+#include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <pthread.h>
 
 #include "net.h"
-
-#define RECV_BUF_SIZE 64
 
 struct tcp_connection {
   int listenSockFD;  // Optional, only required if tcp_listen is called.
@@ -47,7 +51,7 @@ struct remote_ip_handle {
   } ipData;
 };
 
-// Internal functions for comparing sockaddr structs. 
+// Internal functions for comparing sockaddr structs.
 int compare_addr(struct sockaddr_in *first, struct sockaddr_in *second) {
   return (first->sin_addr.s_addr == second->sin_addr.s_addr) &&
          (first->sin_port == second->sin_port);
@@ -67,7 +71,7 @@ int compare_addr6(struct sockaddr_in6 *first, struct sockaddr_in6 *second) {
   return match;
 }
 
-// Internal function to generate a local socket and optionally bind it. 
+// Internal function to generate a local socket and optionally bind it.
 int generate_socket(remote_ip ip, int listen, int doBind) {
   int protocol = ip.handle->protocolVer == IPV4 ? AF_INET : AF_INET6;
   struct addrinfo hints = {0};
@@ -78,14 +82,15 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
 
   if (listen != 0) {
     int rc = -1;
-    char portStr[6];
+    char portStr[PORT_STRLEN];
     sprintf(portStr, "%d", listen);
     if ((rc = getaddrinfo(NULL, portStr, &hints, &res)) != 0) {
       return -1;
     }
   } else {
     int rc = -1;
-    // If its not a listen socket, we don't need to care what port we use for this local socket
+    // If its not a listen socket, we don't need to care what port we use for
+    // this local socket
     if ((rc = getaddrinfo(ip.addr, "0", &hints, &res)) != 0) {
       return -1;
     }
@@ -115,7 +120,7 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
     if ((candidateSocket = socket(candidate->ai_family, candidate->ai_socktype,
                                   candidate->ai_protocol)) != -1) {
       int rc = 0;
-      // Don't wait for connection to time out after finishing. 
+      // Don't wait for connection to time out after finishing.
       int yes = 1;
       setsockopt(candidateSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
       // Not all local sockets should actually be bound
@@ -133,14 +138,15 @@ int generate_socket(remote_ip ip, int listen, int doBind) {
   return -1;
 }
 
-// Special internal function that just calls generate_socket to create a socket specifically for listening. 
+// Special internal function that just calls generate_socket to create a socket
+// specifically for listening.
 int generate_listen_socket(int ver, int portNum) {
   remote_ip ip;
   ip.handle = malloc(sizeof(remote_ip_handle));
   memset(ip.handle, 0, sizeof(remote_ip_handle));
 
   ip.handle->protocolVer = ver;
-  ip.addr = NULL;   // If its our own IP, just use NULL;
+  ip.addr = NULL;  // If its our own IP, just use NULL;
   ip.port = NULL;
   return generate_socket(ip, portNum, 1);
 }
@@ -155,13 +161,13 @@ void Initialize() {
   }
 }
 
-void free_sock_addresses(remote_ips ips) { 
+void free_sock_addresses(remote_ips ips) {
   for (size_t i = 0; i < ips.len; i++) {
     free(ips.ips[i].addr);
     free(ips.ips[i].port);
     free(ips.ips[i].handle);
   }
-  free(ips.ips); 
+  free(ips.ips);
 }
 
 remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips,
@@ -208,11 +214,12 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips,
           ip.handle = malloc(sizeof(remote_ip_handle));
           memset(ip.handle, 0, sizeof(remote_ip_handle));
           ip.handle->protocolVer = IPV4;
-          memcpy(&ip.handle->ipData.ipv4, (struct sockaddr_in *)candidate->ai_addr,
+          memcpy(&ip.handle->ipData.ipv4,
+                 (struct sockaddr_in *)candidate->ai_addr,
                  sizeof(struct sockaddr_in));
           // Store the string representation into the remote_ip object
-          ip.addr = malloc(INET_ADDRSTRLEN+1);
-          ip.port = malloc(6);
+          ip.addr = malloc(INET_ADDRSTRLEN + 1);
+          ip.port = malloc(PORT_STRLEN);
           strcpy(ip.addr, ips[i]);
           strcpy(ip.port, ports[i]);
           ipList.ips[ipList.len] = ip;
@@ -223,11 +230,12 @@ remote_ips process_tcp_sock_addresses(tcp_connection *conn, const char **ips,
           ip.handle = malloc(sizeof(remote_ip_handle));
           memset(ip.handle, 0, sizeof(remote_ip_handle));
           ip.handle->protocolVer = IPV6;
-          memcpy(&ip.handle->ipData.ipv6, (struct sockaddr_in6 *)candidate->ai_addr,
+          memcpy(&ip.handle->ipData.ipv6,
+                 (struct sockaddr_in6 *)candidate->ai_addr,
                  sizeof(struct sockaddr_in6));
           // Store the string representation into the remote_ip object
-          ip.addr = malloc(INET6_ADDRSTRLEN+1);
-          ip.port = malloc(6);
+          ip.addr = malloc(INET6_ADDRSTRLEN + 1);
+          ip.port = malloc(PORT_STRLEN);
           strcpy(ip.addr, ips[i]);
           strcpy(ip.port, ports[i]);
           ipList.ips[ipList.len] = ip;
@@ -258,7 +266,8 @@ tcp_connection *create_tcp_connection(conn_opt opt) {
       activeConnections[i].listenSockFD =
           generate_listen_socket(activeConnections[i].options.ver,
                                  activeConnections[i].options.port_num);
-      activeConnections[i].protocolVerPlatSpecific = activeConnections[i].options.ver == IPV4 ? AF_INET : AF_INET6;
+      activeConnections[i].protocolVerPlatSpecific =
+          activeConnections[i].options.ver == IPV4 ? AF_INET : AF_INET6;
       pthread_rwlock_init(&activeConnections[i].mutex, NULL);
       if (activeConnections[i].listenSockFD == -1) {
         return NULL;
@@ -292,7 +301,7 @@ int destroy_tcp_connection(tcp_connection *conn) {
 
 int tcp_listen(tcp_connection *conn) {
   int rc = listen(conn->listenSockFD, SOMAXCONN);
-  return (rc == 0) ? 1 : 0;   // legacy api choice made this backwards
+  return (rc == 0) ? 1 : 0;  // legacy api choice made this backwards
 }
 
 remote_ip *accept_remote_connection(tcp_connection *conn) {
@@ -303,21 +312,25 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
   int newFD = -1;
   if (ip->handle->protocolVer == AF_INET) {
     socklen_t addrlen = sizeof(ip->handle->ipData.ipv4);
-    newFD = accept(conn->listenSockFD, (struct sockaddr *)&ip->handle->ipData.ipv4,
-                   &addrlen);
+    newFD = accept(conn->listenSockFD,
+                   (struct sockaddr *)&ip->handle->ipData.ipv4, &addrlen);
     // Store string representation in ip struct.
-    ip->addr = malloc(INET_ADDRSTRLEN+1);
-    ip->port = malloc(6);
-    inet_ntop(AF_INET, &((struct sockaddr_in *)&ip->handle->ipData.ipv4)->sin_addr, ip->addr, INET_ADDRSTRLEN+1);
+    ip->addr = malloc(INET_ADDRSTRLEN + 1);
+    ip->port = malloc(PORT_STRLEN);
+    inet_ntop(AF_INET,
+              &((struct sockaddr_in *)&ip->handle->ipData.ipv4)->sin_addr,
+              ip->addr, INET_ADDRSTRLEN + 1);
     sprintf(ip->port, "%u", ip->handle->ipData.ipv4.sin_port);
   } else {
     socklen_t addrlen = sizeof(ip->handle->ipData.ipv6);
-    newFD = accept(conn->listenSockFD, (struct sockaddr *)&ip->handle->ipData.ipv6,
-                   &addrlen);
+    newFD = accept(conn->listenSockFD,
+                   (struct sockaddr *)&ip->handle->ipData.ipv6, &addrlen);
     // Store string representation in ip struct.
-    ip->addr = malloc(INET6_ADDRSTRLEN+1);
-    ip->port = malloc(6);
-    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip->handle->ipData.ipv6)->sin6_addr, ip->addr, INET6_ADDRSTRLEN+1);
+    ip->addr = malloc(INET6_ADDRSTRLEN + 1);
+    ip->port = malloc(PORT_STRLEN);
+    inet_ntop(AF_INET6,
+              &((struct sockaddr_in6 *)&ip->handle->ipData.ipv6)->sin6_addr,
+              ip->addr, INET6_ADDRSTRLEN + 1);
     sprintf(ip->port, "%u", ip->handle->ipData.ipv6.sin6_port);
   }
   if (newFD == -1) {
@@ -333,9 +346,9 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
   }
   conn->incomingFDs[conn->numIncomingFDs - 1] = newFD;
   pthread_rwlock_unlock(&conn->mutex);
-  // Also store the fd in the ip struct so we associate these structs with fds. 
+  // Also store the fd in the ip struct so we associate these structs with fds.
   ip->handle->fd = newFD;
-  
+
   return ip;
 }
 
@@ -383,7 +396,8 @@ int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
       }
       conn->outgoingFDs[conn->numOutgoingFDs - 1] = sockfd;
       pthread_rwlock_unlock(&conn->mutex);
-      remotes.ips[i].handle->fd = sockfd;   // Again, associate fd with ip struct.
+      remotes.ips[i].handle->fd =
+          sockfd;  // Again, associate fd with ip struct.
     }
   }
   return succeedAll;
@@ -393,7 +407,7 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
   remote_ips ips;
   ips.len = conn->numIncomingFDs;
   ips.ips = malloc(sizeof(remote_ip) * ips.len);
-  // Loop over every fd, get peer info, construct an ip struct and add it. 
+  // Loop over every fd, get peer info, construct an ip struct and add it.
   for (size_t i = 0; i < ips.len; i++) {
     remote_ip ip;
     ip.handle = malloc(sizeof(remote_ip_handle));
@@ -406,15 +420,19 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
     pthread_rwlock_unlock(&conn->mutex);
     if (ip.handle->protocolVer == AF_INET) {
       ip.handle->ipData.ipv4 = *(struct sockaddr_in *)&addr;
-      ip.addr = malloc(INET_ADDRSTRLEN+1);
-      ip.port = malloc(6);
-      inet_ntop(AF_INET, &((struct sockaddr_in *)&ip.handle->ipData.ipv4)->sin_addr, ip.addr, INET_ADDRSTRLEN+1);
+      ip.addr = malloc(INET_ADDRSTRLEN + 1);
+      ip.port = malloc(PORT_STRLEN);
+      inet_ntop(AF_INET,
+                &((struct sockaddr_in *)&ip.handle->ipData.ipv4)->sin_addr,
+                ip.addr, INET_ADDRSTRLEN + 1);
       sprintf(ip.port, "%u", ip.handle->ipData.ipv4.sin_port);
     } else {
       ip.handle->ipData.ipv6 = *(struct sockaddr_in6 *)&addr;
-      ip.addr = malloc(INET6_ADDRSTRLEN+1);
-      ip.port = malloc(6);
-      inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip.handle->ipData.ipv6)->sin6_addr, ip.addr, INET6_ADDRSTRLEN+1);
+      ip.addr = malloc(INET6_ADDRSTRLEN + 1);
+      ip.port = malloc(PORT_STRLEN);
+      inet_ntop(AF_INET6,
+                &((struct sockaddr_in6 *)&ip.handle->ipData.ipv6)->sin6_addr,
+                ip.addr, INET6_ADDRSTRLEN + 1);
       sprintf(ip.port, "%u", ip.handle->ipData.ipv6.sin6_port);
     }
     pthread_rwlock_wrlock(&conn->mutex);
@@ -429,7 +447,7 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
   remote_ips ips;
   ips.len = conn->numOutgoingFDs;
   ips.ips = malloc(sizeof(remote_ip) * ips.len);
-  // Loop over every fd, get peer info, construct an ip struct and add it. 
+  // Loop over every fd, get peer info, construct an ip struct and add it.
   for (size_t i = 0; i < ips.len; i++) {
     remote_ip ip;
     ip.handle = malloc(sizeof(remote_ip_handle));
@@ -442,15 +460,19 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
     pthread_rwlock_unlock(&conn->mutex);
     if (ip.handle->protocolVer == IPV4) {
       ip.handle->ipData.ipv4 = *(struct sockaddr_in *)&addr;
-      ip.addr = malloc(INET_ADDRSTRLEN+1);
-      ip.port = malloc(6);
-      inet_ntop(AF_INET, &((struct sockaddr_in *)&ip.handle->ipData.ipv4)->sin_addr, ip.addr, INET_ADDRSTRLEN+1);
+      ip.addr = malloc(INET_ADDRSTRLEN + 1);
+      ip.port = malloc(PORT_STRLEN);
+      inet_ntop(AF_INET,
+                &((struct sockaddr_in *)&ip.handle->ipData.ipv4)->sin_addr,
+                ip.addr, INET_ADDRSTRLEN + 1);
       sprintf(ip.port, "%u", ip.handle->ipData.ipv4.sin_port);
     } else {
       ip.handle->ipData.ipv6 = *(struct sockaddr_in6 *)&addr;
-      ip.addr = malloc(INET6_ADDRSTRLEN+1);
-      ip.port = malloc(6);
-      inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ip.handle->ipData.ipv6)->sin6_addr, ip.addr, INET6_ADDRSTRLEN+1);
+      ip.addr = malloc(INET6_ADDRSTRLEN + 1);
+      ip.port = malloc(PORT_STRLEN);
+      inet_ntop(AF_INET6,
+                &((struct sockaddr_in6 *)&ip.handle->ipData.ipv6)->sin6_addr,
+                ip.addr, INET6_ADDRSTRLEN + 1);
       sprintf(ip.port, "%u", ip.handle->ipData.ipv6.sin6_port);
     }
     pthread_rwlock_wrlock(&conn->mutex);
@@ -470,24 +492,24 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
       numSends++;
     } else if (rc == -1) {
       if (errno == ECONNRESET) {
-      pthread_rwlock_wrlock(&conn->mutex);
+        pthread_rwlock_wrlock(&conn->mutex);
         // connection closed, we need to remove the fd
-      for (size_t j = 0; j < conn->numOutgoingFDs; j++) {
+        for (size_t j = 0; j < conn->numOutgoingFDs; j++) {
           if (conn->outgoingFDs[j] == remotes.ips[i].handle->fd) {
             // Remove from the list of file descriptors in tcp_connection
-            conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs-1];
+            conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
             conn->numOutgoingFDs--;
             rc = -1;
-            continue; 
+            continue;
           }
         }
         for (size_t j = 0; j < conn->numIncomingFDs; j++) {
           if (conn->incomingFDs[j] == remotes.ips[i].handle->fd) {
             // Remove from the list of file descriptors in tcp_connection
-            conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs-1];
+            conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
             conn->numIncomingFDs--;
             rc = -1;
-            continue; 
+            continue;
           }
         }
         pthread_rwlock_unlock(&conn->mutex);
@@ -499,30 +521,31 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
 
 int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx,
                         void **data) {
-  *data = malloc(RECV_BUF_SIZE);
-  if ((size_t) senderIdx > ips.len - 1) {
+  *data = malloc(RECV_BUFLEN);
+  if ((size_t)senderIdx > ips.len - 1) {
     return -1;
   }
   remote_ip *sender = &ips.ips[senderIdx];
-  int rc = recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
-  // We have to invalidate the fd thats no longer needed, if the connection gets closed.
+  int rc = recv(sender->handle->fd, *data, RECV_BUFLEN, 0);
+  // We have to invalidate the fd thats no longer needed, if the connection gets
+  // closed.
   if (rc == 0) {
     pthread_rwlock_wrlock(&conn->mutex);
     for (size_t j = 0; j < conn->numOutgoingFDs; j++) {
-        if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
-          // Remove from the list of file descriptors in tcp_connection
-          conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs-1];
-          conn->numOutgoingFDs--;
-        }
+      if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
+        // Remove from the list of file descriptors in tcp_connection
+        conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
+        conn->numOutgoingFDs--;
       }
-      for (size_t j = 0; j < conn->numIncomingFDs; j++) {
-        if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
-          // Remove from the list of file descriptors in tcp_connection
-          conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs-1];
-          conn->numIncomingFDs--;
-        }
+    }
+    for (size_t j = 0; j < conn->numIncomingFDs; j++) {
+      if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
+        // Remove from the list of file descriptors in tcp_connection
+        conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
+        conn->numIncomingFDs--;
       }
-      pthread_rwlock_unlock(&conn->mutex);
+    }
+    pthread_rwlock_unlock(&conn->mutex);
     return 0;
   }
 
@@ -531,8 +554,8 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx,
 
 int receive_tcp_message_async(tcp_connection *conn, remote_ips ips,
                               int senderIdx, void **data) {
-  *data = malloc(RECV_BUF_SIZE);
-  if ((size_t) senderIdx > ips.len - 1) {
+  *data = malloc(RECV_BUFLEN);
+  if ((size_t)senderIdx > ips.len - 1) {
     return -1;
   }
   remote_ip *sender = &ips.ips[senderIdx];
@@ -545,28 +568,29 @@ int receive_tcp_message_async(tcp_connection *conn, remote_ips ips,
   FD_ZERO(&singleSet);
   FD_SET(sender->handle->fd, &singleSet);
 
-  int res = select(sender->handle->fd+1, &singleSet, NULL, NULL, &timeVal);
+  int res = select(sender->handle->fd + 1, &singleSet, NULL, NULL, &timeVal);
   if (res > 0 && FD_ISSET(sender->handle->fd, &singleSet)) {
     // We have new data to return to the library user.
-    int rc = recv(sender->handle->fd, *data, RECV_BUF_SIZE, 0);
-    // We have to invalidate the fd thats no longer needed, if the connection gets closed.
+    int rc = recv(sender->handle->fd, *data, RECV_BUFLEN, 0);
+    // We have to invalidate the fd thats no longer needed, if the connection
+    // gets closed.
     if (rc == 0) {
       pthread_rwlock_wrlock(&conn->mutex);
       for (size_t j = 0; j < conn->numOutgoingFDs; j++) {
-          if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
-            // Remove from the list of file descriptors in tcp_connection
-            conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs-1];
-            conn->numOutgoingFDs--;
-          }
+        if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
+          // Remove from the list of file descriptors in tcp_connection
+          conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
+          conn->numOutgoingFDs--;
         }
-        for (size_t j = 0; j < conn->numIncomingFDs; j++) {
-          if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
-            // Remove from the list of file descriptors in tcp_connection
-            conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs-1];
-            conn->numIncomingFDs--;
-          }
+      }
+      for (size_t j = 0; j < conn->numIncomingFDs; j++) {
+        if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
+          // Remove from the list of file descriptors in tcp_connection
+          conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
+          conn->numIncomingFDs--;
         }
-        pthread_rwlock_unlock(&conn->mutex);
+      }
+      pthread_rwlock_unlock(&conn->mutex);
       return 0;
     }
     return rc;
