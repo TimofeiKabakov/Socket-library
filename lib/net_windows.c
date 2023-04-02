@@ -301,7 +301,6 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
 }
 
 int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data) {
-  // TODO: test needed; is user expected to free *data on failure?
   *data = malloc(RECV_BUFLEN);
   if ((size_t) senderIdx > ips.len -1) {
     return -1;
@@ -347,7 +346,6 @@ int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderId
 }
 
 int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data) {
-  // TODO: test needed
   *data = malloc(RECV_BUFLEN);
   if ((size_t) senderIdx > ips.len - 1) {
     return -1;
@@ -372,46 +370,9 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, voi
       }
     }
 
-  // int nBytesRecved, res;
-  // do
-  // {
-  //   res = select(sender->handle->fd + 1, &singleset, NULL, NULL, &timeval);
-  // } while (res <= 0);
-  
-  // if (res > 0 && FD_ISSET(sender->handle->fd, &singleset)) {
-  //   nBytesRecved = recv(sender->handle->fd, *data, RECV_BUFLEN, 0);
-    
-  //   /* TODO: 0 or SOCKET_ERROR */
-  //   if (nBytesRecved <= 0) {
-  //     AcquireSRWLockExclusive(&conn->mutex);
-  //     for (int j = 0; j < conn->numOutgoingFDs; j++) {
-  //       if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
-  //         conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs - 1];
-  //         conn->numOutgoingFDs--;
-  //       }
-  //     }
-
-  //     for (int j = 0; j < conn->numIncomingFDs; j++) {
-  //       if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
-  //         conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs - 1];
-  //         conn->numIncomingFDs--;
-  //       }
-  //     }
-
-  //     ReleaseSRWLockExclusive(&conn->mutex);
-  //   }
-  //   return nBytesRecved;
-  // } else {
-  //   return 0;
-  // }
-
-  int nBytesReceived;
-  do
-  {
-    nBytesReceived = receive_tcp_message_async(conn, ips, senderIdx, data, len);
-  } while (nBytesReceived <= 0);
-  
-  return nBytesReceived;
+    ReleaseSRWLockExclusive(&conn->mutex);
+  }
+  return nBytesRecved;
 }
 
 remote_ips tcp_active_connects(tcp_connection *conn) {
@@ -420,8 +381,7 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
   ips.ips = malloc(sizeof(remote_ip) * ips.len);
   for (size_t i = 0; i < ips.len; i++) {
     remote_ip ip;
-    ip.handle = malloc(sizeof(remote_ip_handle));
-    memset(ip.handle, 0, sizeof(remote_ip_handle));
+    ip.handle = calloc(1, sizeof(remote_ip_handle));
     ip.handle->protocolVer = conn->protocolVerPlatSpecific;
     struct sockaddr addr = {0};
     socklen_t addrlen = sizeof(addr);
@@ -451,8 +411,7 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
   ips.ips = malloc(sizeof(remote_ip) * ips.len);
   for (size_t i = 0; i < ips.len; i++) {
     remote_ip ip;
-    ip.handle = malloc(sizeof(remote_ip_handle));
-    memset(ip.handle, 0, sizeof(remote_ip_handle));
+    ip.handle = calloc(1, sizeof(remote_ip_handle));
     ip.handle->protocolVer = conn->protocolVerPlatSpecific;
     struct sockaddr addr = {0};
     socklen_t addrlen = sizeof(addr);
@@ -479,8 +438,7 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
 remote_ip *accept_remote_connection(tcp_connection *conn) {
   /* allocate memory for new ip*/
   remote_ip *ip = malloc(sizeof(remote_ip));
-  ip->handle = malloc(sizeof(remote_ip_handle));
-  memset(ip->handle, 0, sizeof(remote_ip_handle));
+  ip->handle = calloc(1, sizeof(remote_ip_handle));
   ip->handle->protocolVer = conn->protocolVerPlatSpecific;
   long long unsigned int newFD = -1;
 
