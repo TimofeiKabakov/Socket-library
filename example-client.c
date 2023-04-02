@@ -29,6 +29,7 @@ int main(int argc, const char **argv) {
   // Initialize the library
   Initialize();
   conn_opt opt = {0};
+  opt.timeout = 10000000;
   opt.ver = IPV4;
   tcp_connection *conn = create_tcp_connection(opt);
   if (conn == NULL) {
