@@ -68,8 +68,8 @@ int main(int argc, const char **argv) {
     // you would preferably want to perform some client-side work here instead of just stalling while waiting for
     // the response. 
     void *data = NULL;
-    size_t len = 0;
-    receive_tcp_message(conn, active, 0, &data, &len);
+    // size_t len = 0;
+    receive_tcp_message(conn, active, 0, &data);
     printf("Received result: %ld\n", strtol((char*)data, NULL, 10));
   }
 }
