@@ -13,11 +13,11 @@ ifeq ($(OS), GNU/Linux)
 	target = example-server-$(VERSION) example-client-$(VERSION)
 endif
 
-all: ./build/bin $(target)
+all: ./build/bin/$(VERSION) $(target)
 
 #--- build dirs ---------------------------------------------------------------
 
-./build/bin:
+./build/bin/$(VERSION):
 	mkdir -p ./build/obj/$(VERSION)
 	mkdir -p ./build/lib/$(VERSION)
 	mkdir -p ./build/bin/$(VERSION)
@@ -27,7 +27,7 @@ all: ./build/bin $(target)
 ./build/lib/$(VERSION)/libNet.a: ./build/obj/$(VERSION)/net.o
 	ar -r ./build/lib/$(VERSION)/libNet.a ./build/obj/$(VERSION)/net.o
 
-./build/obj/$(VERSION)/net.o: ./lib/net_$(VERSION).c ./lib/net.h
+./build/obj/$(VERSION)/net.o: ./lib/net_$(VERSION).c ./lib/net.h ./build/bin/$(VERSION)
 	$(CC) -o ./build/obj/$(VERSION)/net.o -c $(CFLAGS) $(CPPFLAGS) ./lib/net_$(VERSION).c
 
 #--- example server -----------------------------------------------------------
@@ -38,7 +38,7 @@ example-server-$(VERSION): ./build/bin/$(VERSION)/example-server
 ./build/bin/$(VERSION)/example-server: ./build/obj/$(VERSION)/example-server.o ./build/lib/$(VERSION)/libNet.a
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o ./build/bin/$(VERSION)/example-server ./build/obj/$(VERSION)/example-server.o -L./build/lib/$(VERSION) -lNet
 
-./build/obj/$(VERSION)/example-server.o: example-server.c ./lib/net.h
+./build/obj/$(VERSION)/example-server.o: example-server.c ./lib/net.h ./build/bin/$(VERSION)
 	$(CC) -o ./build/obj/$(VERSION)/example-server.o -c $(CFLAGS) $(CPPFLAGS) example-server.c -I./lib
 
 #--- example client -----------------------------------------------------------
@@ -53,7 +53,7 @@ else
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o ./build/bin/$(VERSION)/example-client ./build/obj/$(VERSION)/example-client.o -L./build/lib/$(VERSION) -lNet
 endif
 
-./build/obj/$(VERSION)/example-client.o: example-client.c ./lib/net.h
+./build/obj/$(VERSION)/example-client.o: example-client.c ./lib/net.h ./build/bin/$(VERSION)
 	$(CC) -o ./build/obj/$(VERSION)/example-client.o -c $(CFLAGS) $(CPPFLAGS) example-client.c -I./lib
 
 #--- clean --------------------------------------------------------------------
