@@ -28,7 +28,7 @@ typedef struct work_record {
 
 // This thread entry point simply runs in a loop forever, waiting for 
 // new clients to connect to it. 
-void *accept_connections(void *args) {
+void *accept_connections() {
   while (1) {
     accept_remote_connection(conn);
     pthread_rwlock_wrlock(&mutex);
@@ -63,7 +63,7 @@ void *doWork(void *args) {
   pthread_rwlock_rdlock(&mutex);
   // We need to find the client that requested this work
   // If its no longer connected to the server, the work just gets dropped. 
-  for (int i = 0; i < connectedClients.len; i++) {
+  for (size_t i = 0; i < connectedClients.len; i++) {
       if (strcmp(record->addr, connectedClients.ips[i].addr) == 0 &&
           strcmp(record->port, connectedClients.ips[i].port) == 0) {
             // Found the client we need to respond to
@@ -119,10 +119,10 @@ int main(int argc, const char **argv) {
       // Inefficient locking since this is just an api example - a real world application would want 
       // to perform something more efficient.
       pthread_rwlock_rdlock(&mutex);
-      for (int i = 0; i < connectedClients.len; i++) {
+      for (size_t i = 0; i < connectedClients.len; i++) {
         void *buf = NULL;
-        size_t len = 0;
-        int res = receive_tcp_message_async(conn, connectedClients, i, &buf, &len);
+        //size_t len = 0;
+        int res = receive_tcp_message_async(conn, connectedClients, i, &buf);
         if (res > 0) {
           // Received some data, farm it off to a child thread
           pthread_t workThread;

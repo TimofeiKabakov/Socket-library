@@ -16,7 +16,7 @@
 
 #define RECV_BUF_SIZE 64
 
-typedef struct tcp_connection {
+struct tcp_connection {
   int listenSockFD;  // Optional, only required if tcp_listen is called.
   int *incomingFDs;  // One filedescriptor for each incoming connection through
                      // accept
@@ -32,25 +32,20 @@ typedef struct tcp_connection {
             // is free.
   int protocolVerPlatSpecific;
   pthread_rwlock_t mutex;
-} tcp_connection;
+};
 
 tcp_connection activeConnections[MAX_CONNECTION_OBJECTS];
 size_t connObjects = 0;
 int nextUID = 0;
 
-typedef struct udp_connection {
-  // TODO
-} udp_connection;
-
-typedef struct remote_ip_handle {
+struct remote_ip_handle {
   int protocolVer;
   int fd;
   union {
     struct sockaddr_in ipv4;
     struct sockaddr_in6 ipv6;
   } ipData;
-} remote_ip_handle;
-
+};
 
 // Internal functions for comparing sockaddr structs. 
 int compare_addr(struct sockaddr_in *first, struct sockaddr_in *second) {
@@ -161,7 +156,7 @@ void Initialize() {
 }
 
 void free_sock_addresses(remote_ips ips) { 
-  for (int i = 0; i < ips.len; i++) {
+  for (size_t i = 0; i < ips.len; i++) {
     free(ips.ips[i].addr);
     free(ips.ips[i].port);
     free(ips.ips[i].handle);
@@ -279,10 +274,10 @@ int destroy_tcp_connection(tcp_connection *conn) {
     return -1;
   }
 
-  for (int i = 0; i < conn->numIncomingFDs; i++) {
+  for (size_t i = 0; i < conn->numIncomingFDs; i++) {
     close(conn->incomingFDs[i]);
   }
-  for (int i = 0; i < conn->numOutgoingFDs; i++) {
+  for (size_t i = 0; i < conn->numOutgoingFDs; i++) {
     close(conn->outgoingFDs[i]);
   }
   close(conn->listenSockFD);
@@ -346,7 +341,7 @@ remote_ip *accept_remote_connection(tcp_connection *conn) {
 
 int tcp_connect_remote(tcp_connection *conn, remote_ips remotes) {
   int succeedAll = 1;
-  for (int i = 0; i < remotes.len; i++) {
+  for (size_t i = 0; i < remotes.len; i++) {
     int rc = -1;
     int sockfd = generate_socket(remotes.ips[i], 0, 0);
     if (remotes.ips[i].handle->protocolVer == IPV4) {
@@ -399,7 +394,7 @@ remote_ips tcp_active_accepts(tcp_connection *conn) {
   ips.len = conn->numIncomingFDs;
   ips.ips = malloc(sizeof(remote_ip) * ips.len);
   // Loop over every fd, get peer info, construct an ip struct and add it. 
-  for (int i = 0; i < ips.len; i++) {
+  for (size_t i = 0; i < ips.len; i++) {
     remote_ip ip;
     ip.handle = malloc(sizeof(remote_ip_handle));
     memset(ip.handle, 0, sizeof(remote_ip_handle));
@@ -435,7 +430,7 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
   ips.len = conn->numOutgoingFDs;
   ips.ips = malloc(sizeof(remote_ip) * ips.len);
   // Loop over every fd, get peer info, construct an ip struct and add it. 
-  for (int i = 0; i < ips.len; i++) {
+  for (size_t i = 0; i < ips.len; i++) {
     remote_ip ip;
     ip.handle = malloc(sizeof(remote_ip_handle));
     memset(ip.handle, 0, sizeof(remote_ip_handle));
@@ -469,7 +464,7 @@ remote_ips tcp_active_connects(tcp_connection *conn) {
 int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
                      size_t len) {
   int numSends = 0;
-  for (int i = 0; i < remotes.len; i++) {
+  for (size_t i = 0; i < remotes.len; i++) {
     int rc = send(remotes.ips[i].handle->fd, data, len, 0);
     if (rc > 0) {
       numSends++;
@@ -477,7 +472,7 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
       if (errno == ECONNRESET) {
       pthread_rwlock_wrlock(&conn->mutex);
         // connection closed, we need to remove the fd
-      for (int j = 0; j < conn->numOutgoingFDs; j++) {
+      for (size_t j = 0; j < conn->numOutgoingFDs; j++) {
           if (conn->outgoingFDs[j] == remotes.ips[i].handle->fd) {
             // Remove from the list of file descriptors in tcp_connection
             conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs-1];
@@ -486,7 +481,7 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
             continue; 
           }
         }
-        for (int j = 0; j < conn->numIncomingFDs; j++) {
+        for (size_t j = 0; j < conn->numIncomingFDs; j++) {
           if (conn->incomingFDs[j] == remotes.ips[i].handle->fd) {
             // Remove from the list of file descriptors in tcp_connection
             conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs-1];
@@ -503,9 +498,9 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
 }
 
 int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx,
-                        void **data, size_t *len) {
+                        void **data) {
   *data = malloc(RECV_BUF_SIZE);
-  if (senderIdx > ips.len - 1) {
+  if ((size_t) senderIdx > ips.len - 1) {
     return -1;
   }
   remote_ip *sender = &ips.ips[senderIdx];
@@ -513,14 +508,14 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx,
   // We have to invalidate the fd thats no longer needed, if the connection gets closed.
   if (rc == 0) {
     pthread_rwlock_wrlock(&conn->mutex);
-    for (int j = 0; j < conn->numOutgoingFDs; j++) {
+    for (size_t j = 0; j < conn->numOutgoingFDs; j++) {
         if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
           // Remove from the list of file descriptors in tcp_connection
           conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs-1];
           conn->numOutgoingFDs--;
         }
       }
-      for (int j = 0; j < conn->numIncomingFDs; j++) {
+      for (size_t j = 0; j < conn->numIncomingFDs; j++) {
         if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
           // Remove from the list of file descriptors in tcp_connection
           conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs-1];
@@ -535,9 +530,9 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx,
 }
 
 int receive_tcp_message_async(tcp_connection *conn, remote_ips ips,
-                              int senderIdx, void **data, size_t *len) {
+                              int senderIdx, void **data) {
   *data = malloc(RECV_BUF_SIZE);
-  if (senderIdx > ips.len - 1) {
+  if ((size_t) senderIdx > ips.len - 1) {
     return -1;
   }
   remote_ip *sender = &ips.ips[senderIdx];
@@ -557,14 +552,14 @@ int receive_tcp_message_async(tcp_connection *conn, remote_ips ips,
     // We have to invalidate the fd thats no longer needed, if the connection gets closed.
     if (rc == 0) {
       pthread_rwlock_wrlock(&conn->mutex);
-      for (int j = 0; j < conn->numOutgoingFDs; j++) {
+      for (size_t j = 0; j < conn->numOutgoingFDs; j++) {
           if (conn->outgoingFDs[j] == ips.ips[senderIdx].handle->fd) {
             // Remove from the list of file descriptors in tcp_connection
             conn->outgoingFDs[j] = conn->outgoingFDs[conn->numOutgoingFDs-1];
             conn->numOutgoingFDs--;
           }
         }
-        for (int j = 0; j < conn->numIncomingFDs; j++) {
+        for (size_t j = 0; j < conn->numIncomingFDs; j++) {
           if (conn->incomingFDs[j] == ips.ips[senderIdx].handle->fd) {
             // Remove from the list of file descriptors in tcp_connection
             conn->incomingFDs[j] = conn->incomingFDs[conn->numIncomingFDs-1];
