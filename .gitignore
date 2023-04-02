@@ -5,3 +5,4 @@ docs/*.fdb_latexmk
 docs/*.fls
 docs/*.log
 docs/*.synctex.gz
+example*

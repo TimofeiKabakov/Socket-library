@@ -7,8 +7,7 @@
 /** Forward declared opaque types. These are implementation-specific. */
 struct tcp_connection;
 typedef struct tcp_connection tcp_connection;
-struct udp_connection;
-typedef struct udp_connection udp_connection;
+
 struct remote_ip_handle;
 typedef struct remote_ip_handle remote_ip_handle;
 
@@ -30,6 +29,8 @@ typedef struct remote_ips {
 } remote_ips;
 
 #define MAX_CONNECTION_OBJECTS 10
+#define PORT_STRLEN 6
+#define RECV_BUFLEN 64
 
 // TODO: Define error codes.
 
@@ -171,7 +172,7 @@ int send_tcp_message(tcp_connection *conn, remote_ips remotes, void *data,
  * @param len The length of the received message, in bytes
  * @return 0 on success, or a nonzero value if an error occured.
  */
-int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len);
+int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, void **data);
 /**
  * @brief Retrieves a pending TCP message, if one exists.
  *
@@ -186,5 +187,5 @@ int receive_tcp_message(tcp_connection *conn, remote_ips ips, int senderIdx, voi
  * @param len The length of the received message, in bytes
  * @return The number of bytes read on success, 0 if no new data to read or if error occured.
  */
-int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data, size_t *len);
+int receive_tcp_message_async(tcp_connection *conn, remote_ips ips, int senderIdx, void **data);
 #endif

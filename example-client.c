@@ -4,7 +4,7 @@
 // The idea is that this simple example models a real-world use case where clients need
 // to offload some very expensive computation onto a much more powerful server. 
 
-#include "lib/net.h"
+#include "net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,8 +68,8 @@ int main(int argc, const char **argv) {
     // you would preferably want to perform some client-side work here instead of just stalling while waiting for
     // the response. 
     void *data = NULL;
-    size_t len = 0;
-    receive_tcp_message(conn, active, 0, &data, &len);
+    // size_t len = 0;
+    receive_tcp_message(conn, active, 0, &data);
     printf("Received result: %ld\n", strtol((char*)data, NULL, 10));
   }
 }
